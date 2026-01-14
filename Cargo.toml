@@ -7,3 +7,5 @@ edition = "2024"
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
 ratatui = "0.30.0"
+serde = { version = "1.0.228", features = ["derive"] }
+uuid = { version = "1.19.0", features = ["v4", "serde"] }

@@ -517,6 +517,8 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "ratatui",
+ "serde",
+ "uuid",
 ]
 
 [[package]]
@@ -1501,6 +1503,7 @@ dependencies = [
  "atomic",
  "getrandom",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 
