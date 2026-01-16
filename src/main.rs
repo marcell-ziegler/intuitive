@@ -1,6 +1,6 @@
-use crate::{model::App, ui::draw_ui};
+use crate::{app::App, ui::draw_ui};
 
-mod model;
+mod app;
 mod ui;
 
 fn main() -> color_eyre::Result<()> {
