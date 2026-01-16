@@ -1,7 +1,9 @@
+//! [TODO:description]
+
 use rand;
-use ratatui::init;
 use uuid::Uuid;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum DamageOutcome {
     Survived,
     Downed,
@@ -107,6 +109,7 @@ pub enum Status {
 /// * `ac`: Armor Class of creature
 /// * `is_dead`: wether the Creature is dead.
 /// * `statuses`: `Vec<Status>` of all statuses currently affecting the Creature.
+#[derive(Debug, Clone)]
 struct CreatureProperties {
     name: String,
     hp: u32,
@@ -117,6 +120,7 @@ struct CreatureProperties {
     initiative: Option<u8>,
 }
 
+#[derive(Debug, Clone)]
 pub struct Player {
     props: CreatureProperties,
     is_down: bool,
@@ -148,6 +152,11 @@ impl Player {
             },
             is_down: false,
         }
+    }
+
+    /// Return wether the `Player` is down
+    pub fn is_down(&self) -> bool {
+        self.is_down
     }
 }
 
@@ -244,6 +253,7 @@ impl Creature for Player {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Monster {
     props: CreatureProperties,
     cr: f64,
