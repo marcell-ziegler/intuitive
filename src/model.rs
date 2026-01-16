@@ -1,12 +1,6 @@
+use rand;
+use ratatui::init;
 use uuid::Uuid;
-
-pub struct App {}
-
-impl Default for App {
-    fn default() -> Self {
-        App {}
-    }
-}
 
 pub enum DamageOutcome {
     Survived,
@@ -69,9 +63,24 @@ pub trait Creature {
 
     /// Remove all Statuses from the Creature
     fn clear_status(&mut self);
+
+    /// Set the creatures initiative to a random u8 between 0..=20 and return the value
+    fn roll_initiative(&mut self) -> u8;
+
+    /// Set the players initiative to a 1 <= u8 <= 20
+    ///
+    /// # Panics
+    /// Panics if `value` is not between 1-20
+    fn set_initiative(&mut self, value: u8);
+
+    /// Clear the initiative of the Creature, i.e. set it to None
+    fn clear_initative(&mut self);
+
+    /// Get the creatures initiative, or if it is `None``: roll it and return the new value.
+    fn get_initiative(&mut self) -> u8;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Status {
     Blinded,
     Charmed,
@@ -87,7 +96,7 @@ pub enum Status {
     Prone,
     Restrained,
     Stunned,
-    Unconcious,
+    Unconscious,
 }
 
 /// Common properties of types that are Creature
@@ -114,12 +123,24 @@ pub struct Player {
 }
 
 impl Player {
-    fn new(name: &str, max_hp: u32, ac: u32) -> Self {
+    /// Make an instance of `Player`
+    ///
+    /// * `name`: The `Player`'s name
+    /// * `max_hp`: The `Player`'s max hp
+    /// * `ac`: The `Player`'s armour class
+    /// * `current_hp`: an `Option<u32>` containing None if cur_hp is max_hp otherwise the current hp. An invalid current hp automatically becomes max_hp.
+    pub fn new(name: &str, max_hp: u32, ac: u32, current_hp: Option<u32>) -> Self {
         Player {
             props: CreatureProperties {
                 name: String::from(name),
                 max_hp,
-                hp: max_hp,
+                hp: if let Some(chp) = current_hp
+                    && chp <= max_hp
+                {
+                    chp
+                } else {
+                    max_hp
+                },
                 ac,
                 is_dead: false,
                 statuses: Vec::new(),
@@ -155,7 +176,7 @@ impl Creature for Player {
     }
 
     fn heal(&mut self, amount: u32) {
-        self.props.hp = (self.props.hp + amount).max(self.max_hp())
+        self.props.hp = (self.props.hp + amount).min(self.max_hp())
     }
 
     fn damage(&mut self, amount: u32) -> DamageOutcome {
@@ -163,7 +184,7 @@ impl Creature for Player {
         let delta = curr_hp - (amount as i32);
 
         // Set hp to 0 or whatever it is after the damage.
-        self.props.hp = (curr_hp - amount as i32).max(0) as u32;
+        self.props.hp = delta.max(0) as u32;
 
         if delta > 0 {
             DamageOutcome::Survived
@@ -184,7 +205,9 @@ impl Creature for Player {
     }
 
     fn add_status(&mut self, status: Status) {
-        self.props.statuses.push(status);
+        if !self.props.statuses.contains(&status) {
+            self.props.statuses.push(status);
+        }
     }
 
     fn clear_status(&mut self) {
@@ -194,4 +217,34 @@ impl Creature for Player {
     fn get_statuses(&self) -> &Vec<Status> {
         &self.props.statuses
     }
+
+    fn get_initiative(&mut self) -> u8 {
+        if let Some(initiative) = self.props.initiative {
+            initiative
+        } else {
+            self.roll_initiative()
+        }
+    }
+
+    fn set_initiative(&mut self, value: u8) {
+        if !(1..=20).contains(&value) {
+            panic!("Invalid initiative input: {value}")
+        }
+        self.props.initiative = Some(value);
+    }
+
+    fn roll_initiative(&mut self) -> u8 {
+        let initiative = rand::random_range(1..=20);
+        self.props.initiative = Some(initiative);
+        initiative
+    }
+
+    fn clear_initative(&mut self) {
+        self.props.initiative = None;
+    }
+}
+
+pub struct Monster {
+    props: CreatureProperties,
+    cr: f64,
 }
