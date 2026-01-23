@@ -12,8 +12,118 @@ pub enum DamageOutcome {
 
 pub type CreatureId = Uuid;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Stats {
+    pub strength: u8,
+    pub dexterity: u8,
+    pub constitution: u8,
+    pub intelligence: u8,
+    pub wisdom: u8,
+    pub charisma: u8,
+}
+impl Stats {
+    /// Create a new `Stats` with values clamped to 0 <= x <= 30
+    ///
+    /// * `str`: Strength
+    /// * `dex`: Dexterity
+    /// * `con`: Constitution
+    /// * `int`: Intelligence
+    /// * `wis`: Wisdom
+    /// * `cha`: Charisma
+    pub fn new(str: u8, dex: u8, con: u8, int: u8, wis: u8, cha: u8) -> Self {
+        let strength = str.min(30);
+        let dexterity = dex.min(30);
+        let constitution = con.min(30);
+        let intelligence = int.min(30);
+        let wisdom = wis.min(30);
+        let charisma = cha.min(30);
+
+        Stats {
+            strength,
+            dexterity,
+            constitution,
+            intelligence,
+            wisdom,
+            charisma,
+        }
+    }
+
+    fn to_mod(stat: u8) -> i8 {
+        if stat == 1 {
+            -5
+        } else if stat <= 3 {
+            -4
+        } else if stat <= 5 {
+            -3
+        } else if stat <= 7 {
+            -2
+        } else if stat <= 9 {
+            -1
+        } else if stat <= 11 {
+            0
+        } else if stat <= 13 {
+            1
+        } else if stat <= 15 {
+            2
+        } else if stat <= 17 {
+            3
+        } else if stat <= 19 {
+            4
+        } else if stat <= 21 {
+            5
+        } else if stat <= 23 {
+            6
+        } else if stat <= 25 {
+            7
+        } else if stat <= 27 {
+            8
+        } else if stat <= 29 {
+            9
+        } else {
+            10
+        }
+    }
+
+    /// Return the strength modifier
+    pub fn str_mod(&self) -> i8 {
+        Stats::to_mod(self.strength)
+    }
+
+    /// Return the dexterity modifier
+    pub fn dex_mod(&self) -> i8 {
+        Stats::to_mod(self.dexterity)
+    }
+    /// Return the constitution modifier
+    pub fn con_mod(&self) -> i8 {
+        Stats::to_mod(self.constitution)
+    }
+    /// Return the intelligence modifier
+    pub fn int_mod(&self) -> i8 {
+        Stats::to_mod(self.intelligence)
+    }
+    /// return the wisdom modifier
+    pub fn wis_mod(&self) -> i8 {
+        Stats::to_mod(self.wisdom)
+    }
+    /// Return the charisma modifier
+    pub fn cha_mod(&self) -> i8 {
+        Stats::to_mod(self.charisma)
+    }
+}
+impl Default for Stats {
+    fn default() -> Self {
+        Stats {
+            strength: 10,
+            dexterity: 10,
+            constitution: 10,
+            intelligence: 10,
+            wisdom: 10,
+            charisma: 10,
+        }
+    }
+}
+
 /// Common getters for creatures
-/// [TODO:description]
 pub trait Creature {
     /// Return the current health of the Creature
     fn hp(&self) -> u32;
@@ -66,13 +176,10 @@ pub trait Creature {
     /// Remove all Statuses from the Creature
     fn clear_status(&mut self);
 
-    /// Set the creatures initiative to a random u8 between 0..=20 and return the value
+    /// Set the creatures initiative to a random u8 between 0..=20 + the players initiative (Dex) modifier and return the value
     fn roll_initiative(&mut self) -> u8;
 
-    /// Set the players initiative to a 1 <= u8 <= 20
-    ///
-    /// # Panics
-    /// Panics if `value` is not between 1-20
+    /// Set the players initiative
     fn set_initiative(&mut self, value: u8);
 
     /// Clear the initiative of the Creature, i.e. set it to None
@@ -80,6 +187,9 @@ pub trait Creature {
 
     /// Get the creatures initiative, or if it is `None``: roll it and return the new value.
     fn get_initiative(&mut self) -> u8;
+
+    /// Return an immutable borrow if the Creatures stats
+    fn stats(&self) -> &Stats;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -118,12 +228,12 @@ struct CreatureProperties {
     is_dead: bool,
     statuses: Vec<Status>,
     initiative: Option<u8>,
+    stats: Stats,
 }
 
 #[derive(Debug, Clone)]
 pub struct Player {
     props: CreatureProperties,
-    is_down: bool,
 }
 
 impl Player {
@@ -133,7 +243,13 @@ impl Player {
     /// * `max_hp`: The `Player`'s max hp
     /// * `ac`: The `Player`'s armour class
     /// * `current_hp`: an `Option<u32>` containing None if cur_hp is max_hp otherwise the current hp. An invalid current hp automatically becomes max_hp.
-    pub fn new(name: &str, max_hp: u32, ac: u32, current_hp: Option<u32>) -> Self {
+    pub fn new(
+        name: &str,
+        max_hp: u32,
+        ac: u32,
+        current_hp: Option<u32>,
+        stats: Option<Stats>,
+    ) -> Self {
         Player {
             props: CreatureProperties {
                 name: String::from(name),
@@ -149,14 +265,9 @@ impl Player {
                 is_dead: false,
                 statuses: Vec::new(),
                 initiative: None,
+                stats: stats.unwrap_or_default(),
             },
-            is_down: false,
         }
-    }
-
-    /// Return wether the `Player` is down
-    pub fn is_down(&self) -> bool {
-        self.is_down
     }
 }
 
@@ -185,6 +296,9 @@ impl Creature for Player {
     }
 
     fn heal(&mut self, amount: u32) {
+        if self.hp() == 0 && amount > 0 {
+            self.props.is_dead = false;
+        }
         self.props.hp = (self.props.hp + amount).min(self.max_hp())
     }
 
@@ -198,6 +312,7 @@ impl Creature for Player {
         if delta > 0 {
             DamageOutcome::Survived
         } else if delta <= -(self.max_hp() as i32) {
+            self.props.is_dead = true;
             DamageOutcome::Died
         } else {
             DamageOutcome::Downed
@@ -236,14 +351,11 @@ impl Creature for Player {
     }
 
     fn set_initiative(&mut self, value: u8) {
-        if !(1..=20).contains(&value) {
-            panic!("Invalid initiative input: {value}")
-        }
         self.props.initiative = Some(value);
     }
 
     fn roll_initiative(&mut self) -> u8 {
-        let initiative = rand::random_range(1..=20);
+        let initiative = (rand::random_range(1..=20) + self.stats().dex_mod()).max(0) as u8;
         self.props.initiative = Some(initiative);
         initiative
     }
@@ -251,10 +363,112 @@ impl Creature for Player {
     fn clear_initative(&mut self) {
         self.props.initiative = None;
     }
+
+    fn stats(&self) -> &Stats {
+        &self.props.stats
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Monster {
     props: CreatureProperties,
     cr: f64,
+}
+
+impl Creature for Monster {
+    fn hp(&self) -> u32 {
+        self.props.hp
+    }
+    fn ac(&self) -> u32 {
+        self.props.ac
+    }
+
+    fn name(&self) -> &str {
+        &self.props.name[..]
+    }
+
+    fn max_hp(&self) -> u32 {
+        self.props.max_hp
+    }
+
+    fn is_dead(&self) -> bool {
+        self.props.is_dead
+    }
+
+    fn is_alive(&self) -> bool {
+        !self.props.is_dead
+    }
+
+    fn heal(&mut self, amount: u32) {
+        if self.hp() == 0 && amount > 0 {
+            self.props.is_dead = false;
+        }
+        self.props.hp = (self.props.hp + amount).min(self.max_hp())
+    }
+
+    fn damage(&mut self, amount: u32) -> DamageOutcome {
+        let curr_hp = self.props.hp as i32;
+        let delta = curr_hp - (amount as i32);
+
+        // Set hp to 0 or whatever it is after the damage.
+        self.props.hp = delta.max(0) as u32;
+
+        if delta > 0 {
+            DamageOutcome::Survived
+        } else if delta <= -(self.max_hp() as i32) {
+            self.props.is_dead = true;
+            DamageOutcome::Died
+        } else {
+            DamageOutcome::Downed
+        }
+    }
+
+    fn remove_status(&mut self, status: Status) -> Option<()> {
+        if let Some(i) = self.props.statuses.iter().position(|x| x == &status) {
+            self.props.statuses.remove(i);
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    fn add_status(&mut self, status: Status) {
+        if !self.props.statuses.contains(&status) {
+            self.props.statuses.push(status);
+        }
+    }
+
+    fn clear_status(&mut self) {
+        self.props.statuses.clear();
+    }
+
+    fn get_statuses(&self) -> &Vec<Status> {
+        &self.props.statuses
+    }
+
+    fn get_initiative(&mut self) -> u8 {
+        if let Some(initiative) = self.props.initiative {
+            initiative
+        } else {
+            self.roll_initiative()
+        }
+    }
+
+    fn set_initiative(&mut self, value: u8) {
+        self.props.initiative = Some(value);
+    }
+
+    fn roll_initiative(&mut self) -> u8 {
+        let initiative = (rand::random_range(1..=20) + self.stats().dex_mod()).max(0) as u8;
+        self.props.initiative = Some(initiative);
+        initiative
+    }
+
+    fn clear_initative(&mut self) {
+        self.props.initiative = None;
+    }
+
+    fn stats(&self) -> &Stats {
+        &self.props.stats
+    }
 }
