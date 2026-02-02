@@ -4,7 +4,7 @@ mod player;
 mod stats;
 mod status;
 
-pub use player::Player;
+pub(crate) use player::Player;
 
 #[cfg(test)]
 mod test {

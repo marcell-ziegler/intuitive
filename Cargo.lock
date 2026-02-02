@@ -321,6 +321,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dice-parser"
+version = "0.1.0"
+source = "git+https://github.com/marcell-ziegler/dice-parser.git#bea22e630ae848b3c7074f910836b8ff28243433"
+dependencies = [
+ "rand 0.9.2",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -516,6 +524,7 @@ version = "0.1.0"
 dependencies = [
  "color-eyre",
  "crossterm",
+ "dice-parser",
  "rand 0.9.2",
  "ratatui",
  "serde",
