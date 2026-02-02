@@ -1,4 +1,4 @@
-use intuitive::model::Player;
+use crate::model::Player;
 
 pub struct App {
     pub players: Vec<Player>,
