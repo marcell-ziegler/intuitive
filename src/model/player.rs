@@ -5,8 +5,9 @@ use crate::model::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Player {
+pub(crate) struct Player {
     props: CreatureProperties,
+    level: u8,
 }
 
 impl Player {
@@ -22,6 +23,7 @@ impl Player {
         ac: u32,
         current_hp: Option<u32>,
         stats: Option<Stats>,
+        level: Option<u8>,
     ) -> Self {
         Player {
             props: CreatureProperties {
@@ -40,6 +42,7 @@ impl Player {
                 initiative: None,
                 stats: stats.unwrap_or_default(),
             },
+            level: level.unwrap_or(1),
         }
     }
 }
@@ -147,7 +150,7 @@ mod test {
     use super::*;
     #[test]
     fn test_player_new_and_getters() {
-        let player = Player::new("Alice", 30, 15, None, None);
+        let player = Player::new("Alice", 30, 15, None, None, None);
         assert_eq!(player.name(), "Alice");
         assert_eq!(player.max_hp(), 30);
         assert_eq!(player.hp(), 30);
@@ -159,16 +162,16 @@ mod test {
 
     #[test]
     fn test_player_new_with_current_hp() {
-        let player = Player::new("Bob", 40, 12, Some(25), None);
+        let player = Player::new("Bob", 40, 12, Some(25), None, None);
         assert_eq!(player.hp(), 25);
 
-        let player = Player::new("Carol", 40, 12, Some(50), None);
+        let player = Player::new("Carol", 40, 12, Some(50), None, None);
         assert_eq!(player.hp(), 40); // invalid current_hp defaults to max_hp
     }
 
     #[test]
     fn test_heal_and_damage() {
-        let mut player = Player::new("Dave", 20, 10, Some(10), None);
+        let mut player = Player::new("Dave", 20, 10, Some(10), None, None);
         player.heal(5);
         assert_eq!(player.hp(), 15);
 
@@ -190,7 +193,7 @@ mod test {
 
     #[test]
     fn test_statuses() {
-        let mut player = Player::new("Eve", 10, 10, None, None);
+        let mut player = Player::new("Eve", 10, 10, None, None, None);
         player.add_status(Status::Blinded);
         assert!(player.get_statuses().contains(&Status::Blinded));
 
@@ -216,7 +219,7 @@ mod test {
 
     #[test]
     fn test_initiative() {
-        let mut player = Player::new("Frank", 10, 10, None, None);
+        let mut player = Player::new("Frank", 10, 10, None, None, None);
         let roll = player.roll_initiative();
         assert!((1..=20).contains(&roll));
         assert_eq!(player.get_initiative(), roll);
