@@ -1,3 +1,5 @@
+use dice_parser::{DiceExpr, RollSpec};
+
 use crate::model::{
     creature::{Creature, CreatureProperties, DamageOutcome},
     stats::Stats,
@@ -93,9 +95,13 @@ impl Creature for Monster {
     }
 
     fn roll_initiative(&mut self) -> u8 {
-        let initiative = (rand::random_range(1..=20) + self.stats().dex_mod()).max(0) as u8;
-        self.props.initiative = Some(initiative);
-        initiative
+        let expr = DiceExpr::Sum(
+            // 1d20
+            Box::new(DiceExpr::Roll(RollSpec::new(1, 20, None))),
+            // + Dex modifier
+            Box::new(DiceExpr::Literal(self.stats().dex_mod().into())),
+        );
+        expr.roll().unwrap().total as u8
     }
 
     fn clear_initative(&mut self) {
