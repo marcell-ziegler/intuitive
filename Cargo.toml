@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
+dice-parser = "0.1.1"
 ratatui = "0.30.0"
 serde = { version = "1.0.228", features = ["derive"] }
 uuid = { version = "1.19.0", features = ["v4", "serde"] }
-dice-parser = { git = "https://github.com/marcell-ziegler/dice-parser.git" }
