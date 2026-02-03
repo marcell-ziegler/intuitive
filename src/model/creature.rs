@@ -12,6 +12,7 @@ pub enum DamageOutcome {
     Died,
 }
 
+#[derive(Debug, Clone)]
 pub enum Creature {
     Player {
         props: CreatureProperties,
