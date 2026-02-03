@@ -1,7 +1,7 @@
 use dice_parser::{DiceExpr, RollSpec};
 use uuid::Uuid;
 
-use crate::model::{monster::Monster, player::Player, stats::Stats, status::Status};
+use crate::model::{stats::Stats, status::Status};
 
 pub type CreatureId = Uuid;
 
@@ -10,75 +10,6 @@ pub enum DamageOutcome {
     Survived,
     Downed,
     Died,
-}
-
-/// Common getters for creatures
-pub trait CreatureTrait {
-    /// Return the current health of the Creature
-    fn hp(&self) -> u32;
-
-    /// Return the current health of the Creature
-    fn max_hp(&self) -> u32;
-
-    /// Return the creatures armor class
-    fn ac(&self) -> u32;
-
-    /// Return the name of the creature
-    fn name(&self) -> &str;
-
-    /// Add `amount` to the creatures `hp` up to `max_hp`.
-    fn heal(&mut self, amount: u32);
-
-    /// Lower the creatures `hp` by `amount`.
-    ///
-    /// # Returns
-    /// If the creature is a player and `hp - amount >= -max_hp` then returns
-    /// `DamageOutcome::Downed`. If `hp - amount <= -max_hp` returns `DamageOutcome::Died`.
-    ///
-    /// If not a player, returns `DamageOutcome::Died` if `hp - amount <= 0`
-    ///
-    /// Always returns `DamageOutcome::Survived` if `hp - amount > 0`.
-    fn damage(&mut self, amount: u32) -> DamageOutcome;
-
-    /// Returns `true` if Creature is dead.
-    fn is_dead(&self) -> bool;
-
-    /// Returns `true` if Craeture is alive (not dead).
-    fn is_alive(&self) -> bool;
-
-    /// Borrow teh status vector in a Creature
-    fn get_statuses(&self) -> &Vec<Status>;
-
-    /// Add `status` to the end of the vector of Statuses.
-    ///
-    /// * `status`: the `Status` to be added.
-    fn add_status(&mut self, status: Status);
-
-    /// Remove the given `Status` from the Creature
-    ///
-    /// * `status`: The status to be removed
-    ///
-    /// # Returns
-    /// Some(()) if success, otherwise None.
-    fn remove_status(&mut self, status: Status) -> Option<()>;
-
-    /// Remove all Statuses from the Creature
-    fn clear_status(&mut self);
-
-    /// Set the creatures initiative to a random u8 between 0..=20 + the players initiative (Dex) modifier and return the value
-    fn roll_initiative(&mut self) -> u8;
-
-    /// Set the players initiative
-    fn set_initiative(&mut self, value: u8);
-
-    /// Clear the initiative of the Creature, i.e. set it to None
-    fn clear_initative(&mut self);
-
-    /// Get the creatures initiative, or if it is `None``: roll it and return the new value.
-    fn get_initiative(&mut self) -> u8;
-
-    /// Return an immutable borrow if the Creatures stats
-    fn stats(&self) -> &Stats;
 }
 
 pub enum Creature {
@@ -131,6 +62,7 @@ impl Creature {
             cr: cr.unwrap_or(0.0),
         }
     }
+
     pub fn props(&self) -> &CreatureProperties {
         match self {
             Creature::Player { props: p, level: _ } => p,
@@ -324,16 +256,106 @@ pub struct CreatureProperties {
 }
 
 impl CreatureProperties {
-    pub fn new(name: String, hp: u32, max_hp: u32, ac: u32, stats: Stats) -> Self {
+    pub fn new(name: String, cur_hp: u32, max_hp: u32, ac: u32, stats: Stats) -> Self {
         CreatureProperties {
             name,
-            hp,
+            hp: cur_hp.min(max_hp),
             max_hp,
             ac,
-            is_dead: false,
+            is_dead: cur_hp == 0,
             initiative: None,
             statuses: Vec::new(),
             stats,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::model::Creature;
+
+    use super::*;
+    #[test]
+    fn test_player_new_and_getters() {
+        let player = Creature::new_player("Alice", 30, 15, None, None, None);
+        assert_eq!(player.name(), "Alice");
+        assert_eq!(player.max_hp(), 30);
+        assert_eq!(player.hp(), 30);
+        assert_eq!(player.ac(), 15);
+        assert_eq!(player.stats(), Stats::default());
+        assert!(player.is_alive());
+        assert!(!player.is_dead());
+    }
+
+    #[test]
+    fn test_player_new_with_current_hp() {
+        let player = Creature::new_player("Bob", 40, 12, Some(25), None, None);
+        assert_eq!(player.hp(), 25);
+
+        let player = Creature::new_player("Carol", 40, 12, Some(50), None, None);
+        assert_eq!(player.hp(), 40); // invalid current_hp defaults to max_hp
+    }
+
+    #[test]
+    fn test_heal_and_damage() {
+        let mut player = Creature::new_player("Dave", 20, 10, Some(10), None, None);
+        player.heal(5);
+        assert_eq!(player.hp(), 15);
+
+        player.heal(10);
+        assert_eq!(player.hp(), 20); // should not exceed max_hp
+
+        let outcome = player.damage(5);
+        assert_eq!(outcome, DamageOutcome::Survived);
+        assert_eq!(player.hp(), 15);
+
+        let outcome = player.damage(30);
+        assert_eq!(outcome, DamageOutcome::Downed);
+        assert_eq!(player.hp(), 0);
+
+        let outcome = player.damage(20);
+        assert_eq!(outcome, DamageOutcome::Died);
+        assert!(player.is_dead());
+    }
+
+    #[test]
+    fn test_statuses() {
+        let mut player = Creature::new_player("Eve", 10, 10, None, None, None);
+        player.add_status(Status::Blinded);
+        assert!(player.get_statuses().contains(&Status::Blinded));
+
+        player.add_status(Status::Blinded);
+        assert_eq!(
+            player
+                .get_statuses()
+                .iter()
+                .filter(|s| **s == Status::Blinded)
+                .count(),
+            1
+        );
+
+        player.add_status(Status::Poisoned);
+        assert!(player.get_statuses().contains(&Status::Poisoned));
+
+        player.remove_status(Status::Blinded);
+        assert!(!player.get_statuses().contains(&Status::Blinded));
+
+        player.clear_status();
+        assert!(player.get_statuses().is_empty());
+    }
+
+    #[test]
+    fn test_initiative() {
+        let mut player = Creature::new_player("Frank", 10, 10, None, None, None);
+        let roll = player.roll_initiative();
+        assert!((1..=20).contains(&roll));
+        assert_eq!(player.get_initiative(), roll);
+
+        player.set_initiative(15);
+        assert_eq!(player.get_initiative(), 15);
+
+        player.clear_initative();
+        let new_roll = player.get_initiative();
+        assert!((1..=20).contains(&new_roll));
     }
 }

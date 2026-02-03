@@ -1,7 +1,7 @@
-use crate::model::Player;
+use crate::model::Creature;
 
 pub struct App {
-    pub players: Vec<Player>,
+    pub players: Vec<Creature>,
 }
 
 impl Default for App {

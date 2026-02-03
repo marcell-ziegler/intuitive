@@ -1,6 +1,4 @@
 mod creature;
-mod monster;
-mod player;
 mod stats;
 mod status;
 
