@@ -4,4 +4,4 @@ mod player;
 mod stats;
 mod status;
 
-pub(crate) use player::Player;
+pub(crate) use creature::Creature;
