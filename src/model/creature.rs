@@ -275,6 +275,7 @@ mod test {
     use crate::model::Creature;
 
     use super::*;
+
     #[test]
     fn test_player_new_and_getters() {
         let player = Creature::new_player("Alice", 30, 15, None, None, None);
@@ -297,7 +298,7 @@ mod test {
     }
 
     #[test]
-    fn test_heal_and_damage() {
+    fn test_heal_and_damage_player() {
         let mut player = Creature::new_player("Dave", 20, 10, Some(10), None, None);
         player.heal(5);
         assert_eq!(player.hp(), 15);
@@ -319,7 +320,7 @@ mod test {
     }
 
     #[test]
-    fn test_statuses() {
+    fn test_statuses_player() {
         let mut player = Creature::new_player("Eve", 10, 10, None, None, None);
         player.add_status(Status::Blinded);
         assert!(player.get_statuses().contains(&Status::Blinded));
@@ -345,7 +346,7 @@ mod test {
     }
 
     #[test]
-    fn test_initiative() {
+    fn test_initiative_player() {
         let mut player = Creature::new_player("Frank", 10, 10, None, None, None);
         let roll = player.roll_initiative();
         assert!((1..=20).contains(&roll));
@@ -356,6 +357,90 @@ mod test {
 
         player.clear_initative();
         let new_roll = player.get_initiative();
+        assert!((1..=20).contains(&new_roll));
+    }
+
+    #[test]
+    fn test_monster_new_and_getters() {
+        let monster = Creature::new_monster("Alice", 30, 15, None, None, None);
+        assert_eq!(monster.name(), "Alice");
+        assert_eq!(monster.max_hp(), 30);
+        assert_eq!(monster.hp(), 30);
+        assert_eq!(monster.ac(), 15);
+        assert_eq!(monster.stats(), Stats::default());
+        assert!(monster.is_alive());
+        assert!(!monster.is_dead());
+    }
+
+    #[test]
+    fn test_monster_new_with_current_hp() {
+        let monster = Creature::new_monster("Bob", 40, 12, Some(25), None, None);
+        assert_eq!(monster.hp(), 25);
+
+        let monster = Creature::new_monster("Carol", 40, 12, Some(50), None, None);
+        assert_eq!(monster.hp(), 40); // invalid current_hp defaults to max_hp
+    }
+
+    #[test]
+    fn test_heal_and_damage_monster() {
+        let mut monster = Creature::new_monster("Dave", 20, 10, Some(10), None, None);
+        monster.heal(5);
+        assert_eq!(monster.hp(), 15);
+
+        monster.heal(10);
+        assert_eq!(monster.hp(), 20); // should not exceed max_hp
+
+        let outcome = monster.damage(5);
+        assert_eq!(outcome, DamageOutcome::Survived);
+        assert_eq!(monster.hp(), 15);
+
+        let outcome = monster.damage(30);
+        assert_eq!(outcome, DamageOutcome::Downed);
+        assert_eq!(monster.hp(), 0);
+
+        let outcome = monster.damage(20);
+        assert_eq!(outcome, DamageOutcome::Died);
+        assert!(monster.is_dead());
+    }
+
+    #[test]
+    fn test_statuses_monster() {
+        let mut monster = Creature::new_monster("Eve", 10, 10, None, None, None);
+        monster.add_status(Status::Blinded);
+        assert!(monster.get_statuses().contains(&Status::Blinded));
+
+        monster.add_status(Status::Blinded);
+        assert_eq!(
+            monster
+                .get_statuses()
+                .iter()
+                .filter(|s| **s == Status::Blinded)
+                .count(),
+            1
+        );
+
+        monster.add_status(Status::Poisoned);
+        assert!(monster.get_statuses().contains(&Status::Poisoned));
+
+        monster.remove_status(Status::Blinded);
+        assert!(!monster.get_statuses().contains(&Status::Blinded));
+
+        monster.clear_status();
+        assert!(monster.get_statuses().is_empty());
+    }
+
+    #[test]
+    fn test_initiative_monster() {
+        let mut monster = Creature::new_monster("Frank", 10, 10, None, None, None);
+        let roll = monster.roll_initiative();
+        assert!((1..=20).contains(&roll));
+        assert_eq!(monster.get_initiative(), roll);
+
+        monster.set_initiative(15);
+        assert_eq!(monster.get_initiative(), 15);
+
+        monster.clear_initative();
+        let new_roll = monster.get_initiative();
         assert!((1..=20).contains(&new_roll));
     }
 }
