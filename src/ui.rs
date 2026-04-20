@@ -14,7 +14,7 @@ pub fn draw_ui(frame: &mut Frame, app: &mut App) {
 
     let title = Paragraph::new(Span::styled(
         "Intuitive --- Initiative Tracker",
-        Style::default().italic().fg(Color::LightBlue),
+        Style::default().italic().fg(Color::Yellow),
     ))
     .block(
         Block::bordered()
@@ -95,7 +95,7 @@ fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
             .padding(Padding::symmetric(1, 0)),
     )
     .highlight_symbol("󰞇 ")
-    .row_highlight_style(Style::new().bold().on_yellow());
+    .row_highlight_style(Style::new().bold().on_yellow().dark_gray());
 
     frame.render_stateful_widget(tab, area, &mut app.main_table_state);
 }
