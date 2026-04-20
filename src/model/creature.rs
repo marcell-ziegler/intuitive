@@ -12,6 +12,7 @@ pub enum DamageOutcome {
     Died,
 }
 
+#[derive(Debug, Clone)]
 pub enum Creature {
     Player {
         props: CreatureProperties,
@@ -216,22 +217,25 @@ impl Creature {
     }
 
     /// Set the initiative to `None`
-    pub fn clear_initative(&mut self) {
+    pub fn clear_initiative(&mut self) {
         *self.initiative_mut() = None;
     }
 
-    /// Gets the current initiative, or if it is `None` rolls a new initiative
-    pub fn get_initiative(&mut self) -> u8 {
-        if let Some(i) = self.props().initiative {
-            i
-        } else {
-            self.roll_initiative()
-        }
+    /// Gets the current initiative
+    pub fn get_initiative(&self) -> Option<u8> {
+        self.props().initiative
     }
 
     /// `true` if initiative is not `None`
-    pub fn has_initative(&self) -> bool {
+    pub fn has_initiative(&self) -> bool {
         self.props().initiative.is_some()
+    }
+
+    pub fn get_level_or_cr(&self) -> f64 {
+        match self {
+            Creature::Player { props: _, level } => f64::from(*level),
+            Creature::Monster { props: _, cr } => *cr,
+        }
     }
 }
 
@@ -350,13 +354,13 @@ mod test {
         let mut player = Creature::new_player("Frank", 10, 10, None, None, None);
         let roll = player.roll_initiative();
         assert!((1..=20).contains(&roll));
-        assert_eq!(player.get_initiative(), roll);
+        assert_eq!(player.get_initiative().unwrap(), roll);
 
         player.set_initiative(15);
-        assert_eq!(player.get_initiative(), 15);
+        assert_eq!(player.get_initiative().unwrap(), 15);
 
-        player.clear_initative();
-        let new_roll = player.get_initiative();
+        player.clear_initiative();
+        let new_roll = player.roll_initiative();
         assert!((1..=20).contains(&new_roll));
     }
 
@@ -434,13 +438,13 @@ mod test {
         let mut monster = Creature::new_monster("Frank", 10, 10, None, None, None);
         let roll = monster.roll_initiative();
         assert!((1..=20).contains(&roll));
-        assert_eq!(monster.get_initiative(), roll);
+        assert_eq!(monster.get_initiative().unwrap(), roll);
 
         monster.set_initiative(15);
-        assert_eq!(monster.get_initiative(), 15);
+        assert_eq!(monster.get_initiative().unwrap(), 15);
 
-        monster.clear_initative();
-        let new_roll = monster.get_initiative();
+        monster.clear_initiative();
+        let new_roll = monster.roll_initiative();
         assert!((1..=20).contains(&new_roll));
     }
 }
