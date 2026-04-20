@@ -33,8 +33,9 @@ fn main() -> color_eyre::Result<()> {
             if let Some(key_event) = e.as_key_event() {
                 match key_event.code {
                     KeyCode::Char('q') => break,
-                    KeyCode::Char('j') | KeyCode::Down => app.main_table_state.select_next(),
-                    KeyCode::Char('k') | KeyCode::Up => app.main_table_state.select_previous(),
+                    KeyCode::Char('j') | KeyCode::Down => app.select_next_row(),
+                    KeyCode::Char('k') | KeyCode::Up => app.select_previous_row(),
+                    KeyCode::Char(' ') => app.increment_initiative_order(),
                     _ => continue,
                 }
             }

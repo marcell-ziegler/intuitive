@@ -47,26 +47,33 @@ fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
         .bottom_margin(1);
 
     let mut rows = Vec::new();
-    for creature in app.creatures.iter() {
-        rows.push(Row::new([
-            creature.name().to_string(),
-            if creature.get_level_or_cr().fract() <= f64::EPSILON {
-                creature.get_level_or_cr().floor().to_string()
+    for (i, creature) in app.creatures.iter().enumerate() {
+        rows.push(
+            Row::new([
+                creature.name().to_string(),
+                if creature.get_level_or_cr().fract() <= f64::EPSILON {
+                    creature.get_level_or_cr().floor().to_string()
+                } else {
+                    match creature.get_level_or_cr() {
+                        0.25 => String::from("1/4"),
+                        0.5 => String::from("1/2"),
+                        0.75 => String::from("3/4"),
+                        _ => creature.get_level_or_cr().floor().to_string(),
+                    }
+                },
+                format!("{}/{}", creature.hp(), creature.max_hp()),
+                creature.ac().to_string(),
+                match creature.get_initiative() {
+                    Some(i) => i.to_string(),
+                    None => String::from("n/a"),
+                },
+            ])
+            .style(if app.selected_row == i {
+                Style::new().on_dark_gray()
             } else {
-                match creature.get_level_or_cr() {
-                    0.25 => String::from("1/4"),
-                    0.5 => String::from("1/2"),
-                    0.75 => String::from("3/4"),
-                    _ => creature.get_level_or_cr().floor().to_string(),
-                }
-            },
-            format!("{}/{}", creature.hp(), creature.max_hp()),
-            creature.ac().to_string(),
-            match creature.get_initiative() {
-                Some(i) => i.to_string(),
-                None => String::from("n/a"),
-            },
-        ]))
+                Style::default()
+            }),
+        )
     }
 
     let tab = Table::new(
