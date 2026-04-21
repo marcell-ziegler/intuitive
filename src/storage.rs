@@ -26,7 +26,7 @@ fn xdg_state_home() -> PathBuf {
     env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".local/share")
+            PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".local/state")
         })
 }
 
@@ -56,7 +56,8 @@ pub fn store_encounter(
 
 /// Store the app state to `$XDG_STATE_HOME/intuitive/state.json`
 pub fn store_state(state: &App) -> Result<PathBuf, io::Error> {
-    let data = serde_json::to_string(state)?;
+    let data = serde_json::to_string_pretty(state)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     let path = xdg_state_home().join("intuitive/state.json");
 
     if let Some(parent) = path.parent() {
@@ -72,7 +73,9 @@ pub fn load_state() -> Result<Option<App>, io::Error> {
 
     if fs::exists(&path)? {
         let data = fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&data)?)
+        Ok(Some(serde_json::from_str(&data).map_err(|e| {
+            io::Error::new(io::ErrorKind::InvalidData, e)
+        })?))
     } else {
         Ok(None)
     }

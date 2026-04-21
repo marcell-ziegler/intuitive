@@ -47,11 +47,23 @@ fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
         .bold()
         .bottom_margin(1);
 
+    app.sync_table_state();
+
     let mut rows = Vec::new();
-    for (i, creature) in app.creatures.iter().enumerate() {
+    for (i, creature) in app.current_encounter.creatures.iter().enumerate() {
+        let is_selected = app.current_encounter.cursor_index == i;
+        let is_initiative = app.current_encounter.initiative_index == i;
+
+        let (icon, row_style) = match (is_selected, is_initiative) {
+            (true, true) => ("󰞇", Style::new().on_yellow().dark_gray()),
+            (true, false) => (" ", Style::new().on_dark_gray()),
+            (false, true) => ("󰞇 ", Style::new().on_yellow().dark_gray()),
+            (false, false) => ("  ", Style::default()),
+        };
+
         rows.push(
             Row::new([
-                creature.name().to_string(),
+                format!("{}{}", icon, creature.name()),
                 if creature.get_level_or_cr().fract() <= f64::EPSILON {
                     creature.get_level_or_cr().floor().to_string()
                 } else {
@@ -69,11 +81,7 @@ fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
                     None => String::from("n/a"),
                 },
             ])
-            .style(if app.selected_row == i {
-                Style::new().on_dark_gray()
-            } else {
-                Style::default()
-            }),
+            .style(row_style),
         )
     }
 
@@ -94,9 +102,7 @@ fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
             .border_type(BorderType::Rounded)
             .border_style(Color::LightCyan)
             .padding(Padding::symmetric(1, 0)),
-    )
-    .highlight_symbol("󰞇 ")
-    .row_highlight_style(Style::new().bold().on_yellow().dark_gray());
+    );
 
     frame.render_stateful_widget(tab, area, &mut app.main_table_state);
 }

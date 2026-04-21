@@ -1,6 +1,6 @@
 use crossterm::event::{self, KeyCode};
 
-use crate::{app::App, model::Creature, ui::draw_ui};
+use crate::ui::draw_ui;
 
 mod app;
 mod model;
@@ -11,24 +11,8 @@ fn main() -> color_eyre::Result<()> {
     debug_assert!(dotenvy::dotenv().is_ok());
 
     let mut term = ratatui::init();
-    let mut app = App::default();
-
-    app.add_creature(Creature::new_player(
-        "John Doe",
-        32,
-        12,
-        Some(15),
-        None,
-        Some(2),
-    ));
-    app.add_creature(Creature::new_player(
-        "Bertil Jansson",
-        24,
-        12,
-        None,
-        None,
-        Some(3),
-    ));
+    let mut app = storage::load_state()?.unwrap_or_default();
+    app.sync_table_state();
 
     loop {
         term.draw(|frame| draw_ui(frame, &mut app))?;
@@ -36,14 +20,24 @@ fn main() -> color_eyre::Result<()> {
             if let Some(key_event) = e.as_key_event() {
                 match key_event.code {
                     KeyCode::Char('q') => break,
-                    KeyCode::Char('j') | KeyCode::Down => app.select_next_row(),
-                    KeyCode::Char('k') | KeyCode::Up => app.select_previous_row(),
-                    KeyCode::Char(' ') => app.increment_initiative_order(),
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        app.select_next_row();
+                        storage::store_state(&app)?;
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        app.select_previous_row();
+                        storage::store_state(&app)?;
+                    }
+                    KeyCode::Char(' ') => {
+                        app.increment_initiative_order();
+                        storage::store_state(&app)?;
+                    }
                     _ => continue,
                 }
             }
         }
     }
+    storage::store_state(&app)?;
     ratatui::restore();
     Ok(())
 }
