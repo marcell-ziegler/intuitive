@@ -25,13 +25,14 @@ pub fn draw_ui(frame: &mut Frame, app: &mut App) {
     frame.render_widget(title, chunks[0]);
 
     // Main content chunks, table and sidebar
-    let content_chunks = Layout::horizontal([Constraint::Min(25), Constraint::Length(16)])
+    let content_chunks = Layout::horizontal([Constraint::Min(25), Constraint::Length(36)])
         .spacing(1)
         .split(chunks[1]);
 
     // Sidebar
-    let sidebar_placeholder = Paragraph::new("Sidebar").block(
+    let sidebar_placeholder = Paragraph::new("").block(
         Block::bordered()
+            .title("─Sidebar")
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::LightCyan)),
     );
@@ -99,6 +100,7 @@ fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
     .column_spacing(1)
     .block(
         Block::bordered()
+            .title("─Initiative Order")
             .border_type(BorderType::Rounded)
             .border_style(Color::LightCyan)
             .padding(Padding::symmetric(1, 0)),
