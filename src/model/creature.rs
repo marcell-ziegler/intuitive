@@ -1,4 +1,5 @@
 use dice_parser::{DiceExpr, RollSpec};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::model::{stats::Stats, status::Status};
@@ -12,7 +13,7 @@ pub enum DamageOutcome {
     Died,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Creature {
     Player {
         props: CreatureProperties,
@@ -247,7 +248,7 @@ impl Creature {
 /// * `ac`: Armor Class of creature
 /// * `is_dead`: wether the Creature is dead.
 /// * `statuses`: `Vec<Status>` of all statuses currently affecting the Creature.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatureProperties {
     pub name: String,
     pub hp: u32,

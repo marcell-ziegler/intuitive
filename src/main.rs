@@ -4,9 +4,12 @@ use crate::{app::App, model::Creature, ui::draw_ui};
 
 mod app;
 mod model;
+mod storage;
 mod ui;
 
 fn main() -> color_eyre::Result<()> {
+    debug_assert!(dotenvy::dotenv().is_ok());
+
     let mut term = ratatui::init();
     let mut app = App::default();
 

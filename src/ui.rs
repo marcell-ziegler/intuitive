@@ -25,8 +25,9 @@ pub fn draw_ui(frame: &mut Frame, app: &mut App) {
     frame.render_widget(title, chunks[0]);
 
     // Main content chunks, table and sidebar
-    let content_chunks =
-        Layout::horizontal([Constraint::Min(25), Constraint::Length(16)]).split(chunks[1]);
+    let content_chunks = Layout::horizontal([Constraint::Min(25), Constraint::Length(16)])
+        .spacing(1)
+        .split(chunks[1]);
 
     // Sidebar
     let sidebar_placeholder = Paragraph::new("Sidebar").block(

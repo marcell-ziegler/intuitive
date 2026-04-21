@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 use crate::model::creature::CreatureId;
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Status {
     Blinded,
     Charmed,
