@@ -3,21 +3,31 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{model::Creature, model::Encounter};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Panel {
+    InitiativeTable,
+    Sidebar,
+    Editor,
+}
+
 #[derive(Debug, Clone)]
 pub struct App {
     pub main_table_state: TableState,
     pub current_encounter: Encounter,
+    pub current_panel: Panel,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SerializableApp {
     current_encounter: Encounter,
+    current_panel: Panel,
 }
 
 impl From<&App> for SerializableApp {
     fn from(app: &App) -> Self {
         Self {
             current_encounter: app.current_encounter.clone(),
+            current_panel: app.current_panel,
         }
     }
 }
@@ -34,6 +44,7 @@ impl From<SerializableApp> for App {
         let mut app = Self {
             main_table_state,
             current_encounter: value.current_encounter,
+            current_panel: value.current_panel,
         };
         app.sync_table_state();
         app
@@ -73,6 +84,10 @@ impl App {
         self.current_encounter.select_next_initiative();
         self.sync_table_state();
     }
+
+    pub fn select_panel(&mut self, panel: Panel) {
+        self.current_panel = panel;
+    }
 }
 
 impl Serialize for App {
@@ -98,6 +113,7 @@ impl Default for App {
         let mut app = App {
             main_table_state: TableState::default(),
             current_encounter: Encounter::default(),
+            current_panel: Panel::InitiativeTable,
         };
         app.sync_table_state();
         app
@@ -106,16 +122,13 @@ impl Default for App {
 
 #[cfg(test)]
 mod tests {
-    use super::App;
-    use crate::model::{Creature, Encounter};
-    use ratatui::widgets::TableState;
+    use super::{App, Panel};
+    use crate::model::Creature;
 
     #[test]
     fn app_serde_round_trips_encounter_state() {
-        let mut app = App {
-            main_table_state: TableState::default(),
-            current_encounter: Encounter::default(),
-        };
+        let mut app = App::default();
+        app.select_panel(Panel::Editor);
         app.current_encounter
             .add_creature(Creature::new_player("Alice", 10, 10, None, None, None));
         app.current_encounter
@@ -130,5 +143,6 @@ mod tests {
         assert_eq!(restored.current_encounter.initiative_index, 1);
         assert_eq!(restored.main_table_state.selected(), Some(1));
         assert_eq!(restored.current_encounter.creatures.len(), 2);
+        assert_eq!(restored.current_panel, Panel::Editor);
     }
 }
