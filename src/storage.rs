@@ -3,13 +3,43 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::{app::App, model::Encounter};
+
+const ENCOUNTER_RECORD_VERSION: u16 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncounterRecord {
+    pub schema_version: u16,
+    pub encounter: Encounter,
+}
+
+impl EncounterRecord {
+    pub fn new(encounter: Encounter) -> Self {
+        Self {
+            schema_version: ENCOUNTER_RECORD_VERSION,
+            encounter,
+        }
+    }
+}
 
 pub fn load_encounter(path: impl AsRef<Path>) -> Result<Encounter, io::Error> {
     let contents = fs::read_to_string(path)?;
-    let encounter = serde_json::from_str(&contents)
+    let record: EncounterRecord = serde_json::from_str(&contents)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(encounter)
+
+    if record.schema_version != ENCOUNTER_RECORD_VERSION {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Unsupported encounter schema_version: {}",
+                record.schema_version
+            ),
+        ));
+    }
+
+    Ok(record.encounter)
 }
 
 /// Return the XDG_DATA_HOME directory, or its default.
@@ -35,7 +65,8 @@ pub fn store_encounter(
     encounter: &Encounter,
     path: Option<impl AsRef<Path>>,
 ) -> Result<PathBuf, io::Error> {
-    let data = serde_json::to_string_pretty(encounter)
+    let record = EncounterRecord::new(encounter.clone());
+    let data = serde_json::to_string_pretty(&record)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
     let path = if let Some(path) = path {
@@ -52,6 +83,53 @@ pub fn store_encounter(
 
     fs::write(&path, data)?;
     Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EncounterRecord, load_encounter};
+    use crate::model::Encounter;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_file_path(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("intuitive-{}-{}.json", name, nanos))
+    }
+
+    #[test]
+    fn load_encounter_accepts_current_record_version() {
+        let path = temp_file_path("encounter-v1");
+        let record = EncounterRecord::new(Encounter::default());
+        let json = serde_json::to_string(&record).unwrap();
+        fs::write(&path, json).unwrap();
+
+        let loaded = load_encounter(&path).unwrap();
+        assert_eq!(loaded.creatures.len(), 0);
+
+        fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn load_encounter_rejects_unknown_record_version() {
+        let path = temp_file_path("encounter-v999");
+        let record = EncounterRecord {
+            schema_version: 999,
+            encounter: Encounter::default(),
+        };
+        let json = serde_json::to_string(&record).unwrap();
+        fs::write(&path, json).unwrap();
+
+        let err = load_encounter(&path).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+
+        fs::remove_file(&path).unwrap();
+    }
 }
 
 /// Store the app state to `$XDG_STATE_HOME/intuitive/state.json`
