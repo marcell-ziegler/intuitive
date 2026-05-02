@@ -1,5 +1,7 @@
 use ratatui::widgets::TableState;
+use ratatui_textarea::TextArea;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tui_input::Input;
 
 use crate::{model::Creature, model::Encounter};
 
@@ -15,6 +17,31 @@ pub struct App {
     pub main_table_state: TableState,
     pub current_encounter: Encounter,
     pub current_panel: Panel,
+    pub editor_state: EditorState,
+}
+
+#[derive(Clone, Debug)]
+pub struct EditorState {
+    pub name_input: Input,
+    pub max_hp: u32,
+    pub cur_hp: u32,
+    pub ac: u32,
+    pub cr: f64,
+    pub active_input: EditorField,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+pub enum EditorField {
+    Name,
+    MaxHP,
+    CurrentHP,
+    AC,
+    CR,
+    Unfocused,
+}
+
+pub struct NumInput {
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

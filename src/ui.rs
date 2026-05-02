@@ -1,12 +1,14 @@
+use std::ops::Add;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, BorderType, Padding, Paragraph, Row, Table},
 };
 
-use crate::app::App;
+use crate::app::{App, Panel};
 
 pub fn draw_ui(frame: &mut Frame, app: &mut App) {
     // Main UI Chunks, header and main space
@@ -34,13 +36,26 @@ pub fn draw_ui(frame: &mut Frame, app: &mut App) {
         Block::bordered()
             .title("─Sidebar")
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::LightCyan)),
+            .border_style(if app.current_panel == Panel::Sidebar {
+                Color::LightYellow
+            } else {
+                Color::LightCyan
+            }),
     );
 
     frame.render_widget(sidebar_placeholder, content_chunks[1]);
 
     // Main table
     render_initiative_table(frame, app, content_chunks[0]);
+
+    if app.current_panel == Panel::Editor {
+        render_editor(frame, app)
+    }
+}
+
+fn render_editor(frame: &mut Frame, app: &mut App) {
+    let editor_area = centered_rect(60, 40, frame.area());
+    
 }
 
 fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -101,8 +116,27 @@ fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
     .block(
         Block::bordered()
             .title("─Initiative Order")
+            .title_bottom(Line::from(
+                Span::from("─")
+                    + Span::from("k/j").bold().white()
+                    + Span::from("─")
+                    + Span::from("Up/Down").white()
+                    + Span::from("──")
+                    + Span::from("Tab").bold().white()
+                    + Span::from("─")
+                    + Span::from("Swap Panel").white()
+                    + Span::from("──")
+                    + Span::from("n").bold().white()
+                    + Span::from("─")
+                    + Span::from("Add Creature").white()
+                    + Span::from("──"),
+            ))
             .border_type(BorderType::Rounded)
-            .border_style(Color::LightCyan)
+            .border_style(if app.current_panel == Panel::InitiativeTable {
+                Color::LightYellow
+            } else {
+                Color::LightCyan
+            })
             .padding(Padding::symmetric(1, 0)),
     );
 

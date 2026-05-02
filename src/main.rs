@@ -1,6 +1,6 @@
 use crossterm::event::{self, KeyCode};
 
-use crate::ui::draw_ui;
+use crate::{app::{EditorField, Panel}, ui::draw_ui};
 
 mod app;
 mod model;
@@ -17,6 +17,10 @@ fn main() -> color_eyre::Result<()> {
     loop {
         term.draw(|frame| draw_ui(frame, &mut app))?;
         if let Ok(e) = event::read() {
+            match app.editor_state.active_input {
+                EditorField::AC =>
+            }
+
             if let Some(key_event) = e.as_key_event() {
                 match key_event.code {
                     KeyCode::Char('q') => break,
@@ -31,6 +35,13 @@ fn main() -> color_eyre::Result<()> {
                     KeyCode::Char(' ') => {
                         app.increment_initiative_order();
                         storage::store_state(&app)?;
+                    }
+                    KeyCode::Tab => {
+                        app.current_panel = match app.current_panel {
+                            Panel::InitiativeTable => Panel::Sidebar,
+                            Panel::Sidebar => Panel::InitiativeTable,
+                            _ => app.current_panel,
+                        }
                     }
                     _ => continue,
                 }
