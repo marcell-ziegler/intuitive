@@ -30,6 +30,29 @@ pub struct EditorState {
     pub active_input: EditorField,
 }
 
+impl EditorState {
+    pub fn next_field(&mut self) {
+        self.active_input = match self.active_input {
+            EditorField::Name => EditorField::CurrentHP,
+            EditorField::CurrentHP => EditorField::MaxHP,
+            EditorField::MaxHP => EditorField::AC,
+            EditorField::AC => EditorField::CR,
+            EditorField::CR => EditorField::Amount,
+            EditorField::Amount | EditorField::Unfocused => EditorField::Name,
+        };
+    }
+    pub fn previous_field(&mut self) {
+        self.active_input = match self.active_input {
+            EditorField::Name => EditorField::Amount,
+            EditorField::CurrentHP => EditorField::Name,
+            EditorField::MaxHP => EditorField::CurrentHP,
+            EditorField::AC => EditorField::MaxHP,
+            EditorField::CR => EditorField::AC,
+            EditorField::Amount | EditorField::Unfocused => EditorField::CR,
+        };
+    }
+}
+
 #[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum EditorField {
     Name,
@@ -37,6 +60,7 @@ pub enum EditorField {
     CurrentHP,
     AC,
     CR,
+    Amount,
     Unfocused,
 }
 

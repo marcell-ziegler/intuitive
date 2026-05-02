@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -55,7 +53,6 @@ pub fn draw_ui(frame: &mut Frame, app: &mut App) {
 
 fn render_editor(frame: &mut Frame, app: &mut App) {
     let editor_area = centered_rect(60, 40, frame.area());
-    
 }
 
 fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
