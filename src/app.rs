@@ -1,5 +1,4 @@
 use ratatui::widgets::TableState;
-use ratatui_textarea::TextArea;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tui_input::Input;
 
@@ -20,13 +19,13 @@ pub struct App {
     pub editor_state: EditorState,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct EditorState {
     pub name_input: Input,
-    pub max_hp: u32,
-    pub cur_hp: u32,
-    pub ac: u32,
-    pub cr: f64,
+    pub max_hp_input: Input,
+    pub cur_hp_input: Input,
+    pub ac_input: Input,
+    pub cr_input: Input,
     pub active_input: EditorField,
 }
 
@@ -53,8 +52,9 @@ impl EditorState {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
 pub enum EditorField {
+    #[default]
     Name,
     MaxHP,
     CurrentHP,
@@ -96,6 +96,7 @@ impl From<SerializableApp> for App {
             main_table_state,
             current_encounter: value.current_encounter,
             current_panel: value.current_panel,
+            editor_state: EditorState::default(),
         };
         app.sync_table_state();
         app
@@ -139,6 +140,10 @@ impl App {
     pub fn select_panel(&mut self, panel: Panel) {
         self.current_panel = panel;
     }
+
+    pub fn submit_editor(&mut self) {
+        todo!();
+    }
 }
 
 impl Serialize for App {
@@ -165,6 +170,7 @@ impl Default for App {
             main_table_state: TableState::default(),
             current_encounter: Encounter::default(),
             current_panel: Panel::InitiativeTable,
+            editor_state: EditorState::default(),
         };
         app.sync_table_state();
         app
