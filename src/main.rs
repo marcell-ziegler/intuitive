@@ -107,6 +107,9 @@ fn handle_editor_input_event_delegation(app: &mut App, e: &Event) {
         EditorField::CR => {
             app.editor_state.cr_input.handle_event(&e);
         }
+        EditorField::Amount => {
+            app.editor_state.amount_input.handle_event(&e);
+        }
         _ => (),
     }
 }

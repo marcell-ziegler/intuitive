@@ -26,6 +26,7 @@ pub struct EditorState {
     pub cur_hp_input: Input,
     pub ac_input: Input,
     pub cr_input: Input,
+    pub amount_input: Input,
     pub active_input: EditorField,
 }
 

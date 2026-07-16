@@ -69,9 +69,10 @@ fn render_input(frame: &mut Frame, input: &Input, name: &str, active: bool, area
 }
 
 fn render_editor(frame: &mut Frame, app: &mut App) {
-    let editor_area = centered_rect_fixed_height(40, 2 + 3 * 4, frame.area());
+    let editor_area = centered_rect_fixed_height(40, 2 + 3 * 5, frame.area());
     let input_chunks = Layout::vertical([
         Constraint::Length(1),
+        Constraint::Length(3),
         Constraint::Length(3),
         Constraint::Length(3),
         Constraint::Length(3),
@@ -136,6 +137,13 @@ fn render_editor(frame: &mut Frame, app: &mut App) {
         "Lvl / CR",
         app.editor_state.active_input == EditorField::CR,
         input_chunks[4],
+    );
+    render_input(
+        frame,
+        &app.editor_state.amount_input,
+        "Amount",
+        app.editor_state.active_input == EditorField::Amount,
+        input_chunks[5],
     );
 }
 
