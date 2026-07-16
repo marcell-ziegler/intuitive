@@ -2,9 +2,16 @@
 
 A D&D 5e initiative tracker TUI in Rust + ratatui.
 
-This document captures (1) where the codebase is today, (2) a phased plan to
-reach the full feature set, (3) the architectural refactors that unblock that
-work, and (4) an honest assessment of a possible port to Python + Textual.
+This document captures (1) where the codebase is today, (2) the target
+architecture, (3) a phased plan to reach the full feature set, and (4) an
+in-depth, beginner-oriented guide to the Phase 0 foundation refactor.
+
+> **Stack decision:** the project stays in **Rust + ratatui**. A Python +
+> Textual port was evaluated and rejected — it would discard the tested model
+> layer and orphan the `dice-parser` crate (owned and already integrated), in
+> exchange for faster UI iteration we can approximate with helper crates. Revisit
+> only if hand-rolling the Phase 4 statblock/search UI becomes the real
+> bottleneck; if so, prototype that one screen in Textual before committing.
 
 ---
 
@@ -195,73 +202,269 @@ This is the one that needs its own design decisions — flag them explicitly:
 
 ---
 
-## 4. Should this be ported to Python + Textual?
+## 4. Phase 0 in depth — a foundation-refactor guide
 
-Short version: **the Rust foundation here is good, the risky/uncertain work is
-still ahead, and Textual would buy real velocity on exactly that work — but the
-one already-solved asset (the `dice-parser` crate) and the well-modeled domain
-are Rust. Recommendation: stay in Rust; only reconsider if UI iteration speed
-becomes the actual bottleneck.**
+Context: this project's author comes from library work (`dice-parser`) and is new
+to application/TUI architecture. This section expands Phase 0 into a concrete,
+teachable migration. It is deliberately detailed because getting this shape right
+is what makes Phases 1–4 additive instead of another `match` arm in `main.rs`.
 
-### Where Textual would genuinely help (dev comforts / velocity)
+### The core mental shift: library vs. app
 
-- **UI iteration is much faster.** Textual has CSS-like styling (TCSS with hot
-  reload), a real widget/layout system, built-in focus/scroll/mouse, `DataTable`,
-  `Input`, `ModalScreen`, and reactive attributes. Much of what `ui.rs` builds by
-  hand (centered-rect math, manual focus tracking, per-field `Input` wiring,
-  manual highlight styling) is out-of-the-box. The editor + sidebar + roller
-  modals would be dramatically less code.
-- **Async is first-class.** Phase 4's browser-open, statblock import, and any
-  network/data fetching are trivial with `async` workers; in Rust you'd reach for
-  threads/channels and keep the render loop non-blocking by hand.
-- **The event/action pattern is native.** Textual's message system *is* the
-  Elm-style loop recommended in §2 — you'd get it for free instead of building
-  `action.rs`/`event.rs`.
-- **Data wrangling for 5e.tools is Python's home turf.** JSON ingestion, fuzzy
-  search (`rapidfuzz`), and an embedded `sqlite3` are batteries-included.
-- **Faster edit-run-see cycle** overall (no compile step; `textual run --dev`).
+A library exposes an **API surface** and hands control to a caller. In an app,
+*you are the caller*, and the hard part is managing **mutable state over time** as
+events stream in. Phase 0 imposes one disciplined shape on that: **The Elm
+Architecture (TEA)** — a one-directional loop.
 
-### Where the port costs you
+```
+          ┌─────────────────────────────────────────┐
+          │                                          │
+    event.read() ──▶ map to Action ──▶ App::update(Action) ──▶ mutate state
+          ▲                                                          │
+          │                                                          ▼
+          └──────────────── draw_ui(&App)  ◀───────────────── (next frame)
+```
 
-- **You throw away the strongest, already-working code.** The whole `model/`
-  layer + tests, the storage/versioning, and the mostly-built table/editor would
-  be rewritten. That's re-doing solved work to redo the *unsolved* UI work faster.
-- **`dice-parser` is a Rust crate you own and already integrated.** In Python
-  you'd either reimplement it, call it via `pyo3`/subprocess (friction), or adopt
-  a different Python dice library and re-validate behavior. This is the biggest
-  single argument against the port.
-- **Type safety / correctness.** The domain leans on Rust's enums and exhaustive
-  matches (`Creature`, `Status`, `DamageOutcome`). Python + `mypy`/`pydantic`
-  gets close but won't match the compiler-enforced guarantees the model relies on.
-- **Distribution.** Rust ships a single static binary; a Textual app needs a
-  Python runtime + deps (mitigable with `uv`/`pipx`/PyInstaller, but it's real
-  friction for a "download and run" TUI).
-- **Performance headroom** for a large statblock DB and instant search favors
-  Rust, though at TUI scale this is unlikely to matter.
+Three rules make it work:
 
-### Net assessment
+1. **State lives in exactly one place** (`App`).
+2. **Nothing mutates state except `update`.** Rendering only reads.
+3. **Events are translated into *intent* (an `Action`) before touching state.**
+   Keys are an input detail; `AdvanceTurn` is the intent.
 
-| Dimension | Rust + ratatui | Python + Textual |
-|---|---|---|
-| UI iteration speed | Slower (manual layout/focus, compile) | **Fast** (TCSS, widgets, hot reload) |
-| Reuse of existing code | **Keeps model, storage, dice-parser** | Rewrite everything |
-| Domain correctness | **Compiler-enforced enums** | mypy/pydantic (weaker) |
-| 5e.tools data/search | Manual index or embedded DB | **sqlite + rapidfuzz built-in** |
-| Async (browser/import) | Threads + channels by hand | **Native async workers** |
-| Distribution | **Single binary** | Runtime + deps |
-| Dice engine | **Already done (your crate)** | Reimplement / FFI |
+### Step 1 — Model intent with an `Action` enum
 
-Because the parts Textual accelerates (modals, styling, async, data search) are
-still *unbuilt*, a switch now is more defensible than it would be later — but the
-`dice-parser` investment and the solid model layer tip the balance toward
-**staying in Rust**. A reasonable middle path if UI friction bites: keep the Rust
-core and lean harder on higher-level ratatui helper crates (e.g. `tui-textarea`
-for editing, `tui-popup`/component patterns) to close the ergonomics gap without
-abandoning the binary or the dice crate.
+Actions are **semantic** — what the user wants, independent of which key fired.
+This is what collapses the duplicated `j`/`Down` arms (`main.rs:49-56`) into one
+path and lets keys be rebound later without touching `update`.
 
-**Trigger to revisit:** if, during Phase 4, hand-rolling the sidebar statblock
-view + search UX in ratatui is what's actually slowing you down, prototype *that
-one screen* in Textual before committing to a full port.
+```rust
+// action.rs
+pub enum Action {
+    // navigation / turn tracking
+    SelectNext,
+    SelectPrevious,
+    AdvanceTurn,
+    SwitchPanel,
+
+    // editor lifecycle
+    OpenEditor,
+    CloseEditor,
+    EditorNextField,
+    EditorPrevField,
+    SubmitEditor,
+    EditorInput(crossterm::event::Event), // raw event — see note
+
+    Quit,
+}
+```
+
+**Text input note:** don't abstract character-by-character editing into semantic
+actions — `tui-input` already handles cursor/backspace. Carry the raw `Event` in
+one `EditorInput` variant and delegate to `handle_event` inside `update`, exactly
+like `handle_editor_input_event_delegation` does today (`main.rs:93`). Pragmatism
+over purity here is correct.
+
+### Step 2 — Translate events → actions (the keymap layer)
+
+This pure, *mode-aware* function replaces every scattered `match key_event.code`
+block. The same key means different things per panel — that mode-dependence is
+why it stays separate from `update`.
+
+```rust
+// event.rs
+pub fn map_event(app: &App, event: &Event) -> Option<Action> {
+    let key = event.as_key_event()?;
+    match app.current_panel {
+        Panel::Editor => match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => Some(Action::CloseEditor),
+            KeyCode::Tab | KeyCode::Down       => Some(Action::EditorNextField),
+            KeyCode::BackTab | KeyCode::Up      => Some(Action::EditorPrevField),
+            KeyCode::Enter                      => Some(Action::SubmitEditor),
+            _ => Some(Action::EditorInput(event.clone())),
+        },
+        Panel::InitiativeTable | Panel::Sidebar => match key.code {
+            KeyCode::Char('q')                  => Some(Action::Quit),
+            KeyCode::Char('j') | KeyCode::Down  => Some(Action::SelectNext),
+            KeyCode::Char('k') | KeyCode::Up    => Some(Action::SelectPrevious),
+            KeyCode::Char(' ')                  => Some(Action::AdvanceTurn),
+            KeyCode::Tab                        => Some(Action::SwitchPanel),
+            KeyCode::Char('n')                  => Some(Action::OpenEditor),
+            _ => None, // key means nothing in this mode → ignore
+        },
+    }
+}
+```
+
+`Option<Action>` cleanly encodes "this key does nothing here" — no more
+`_ => return Ok(false)` noise.
+
+### Step 3 — The `update` function and the `Effect` pattern
+
+`update` is the *only* place mutation is allowed. It takes an `Action`, changes
+state, and returns an **`Effect`** — a description of a side effect the loop must
+perform. This keeps I/O out of state logic: `update` doesn't quit or write files,
+it *asks* the loop to. Start minimal; resist a big effect system on day one.
+
+```rust
+pub enum Effect { None, Quit }
+
+impl App {
+    pub fn update(&mut self, action: Action) -> Effect {
+        match action {
+            Action::Quit => return Effect::Quit,
+
+            Action::SelectNext     => { self.select_next_row();           self.dirty = true; }
+            Action::SelectPrevious => { self.select_previous_row();       self.dirty = true; }
+            Action::AdvanceTurn    => { self.increment_initiative_order(); self.dirty = true; }
+            Action::SwitchPanel    => self.toggle_panel(),
+            Action::OpenEditor     => self.current_panel = Panel::Editor,
+            Action::CloseEditor    => { self.reset_editor(); self.current_panel = Panel::InitiativeTable; }
+            Action::EditorNextField => self.editor_state.next_field(),
+            Action::EditorPrevField => self.editor_state.previous_field(),
+            Action::SubmitEditor    => { self.submit_editor(); self.dirty = true; }
+            Action::EditorInput(e)  => self.editor_state.handle_event(&e),
+        }
+        Effect::None
+    }
+}
+```
+
+The loop then shrinks to:
+
+```rust
+// main.rs — the whole loop
+loop {
+    term.draw(|f| draw_ui(f, &app))?;   // note: &app, not &mut
+    let event = event::read()?;
+    if let Some(action) = map_event(&app, &event) {
+        if let Effect::Quit = app.update(action) {
+            break;
+        }
+    }
+}
+app.save_if_dirty()?;
+```
+
+Why an `Effect` enum rather than a `bool`? Today a bool would do. You keep the
+enum because Phase 1+ adds `Effect::OpenBrowser(url)` (the 5e.tools link) and
+similar — things `update` shouldn't *do* but must *request*. Then it's an added
+variant, not a signature change across the codebase. That is the whole
+"make later features additive" goal.
+
+### Step 4 — Rendering reads, never mutates
+
+Concrete cleanup: `render_initiative_table` currently takes `&mut App` and calls
+`app.sync_table_state()` mid-render (`ui.rs:142,147`), and `draw_ui` takes
+`&mut App`. Mutation hidden inside the view is a classic "why did state change
+when I only redrew?" bug source. Pair with Step 6 and **derive** the `TableState`
+at render time so `draw_ui` can take `&App`:
+
+```rust
+fn render_initiative_table(frame: &mut Frame, app: &App, area: Rect) {
+    let mut table_state = TableState::default();
+    if !app.current_encounter.creatures.is_empty() {
+        table_state.select(Some(app.current_encounter.cursor_index));
+    }
+    // ... build rows ...
+    frame.render_stateful_widget(tab, area, &mut table_state);
+}
+```
+
+Once `draw_ui(&App)`, accidental mutation in a view won't compile — the compiler
+enforces the discipline, the same guarantee `&self` methods gave in the library.
+
+### Step 5 — Persistence: dirty flag, calibrated
+
+The plan's "per-keystroke save is a smell" is right in principle, but calibrate to
+scale — knowing *when not to optimize* is an app skill. Add `dirty: bool` to `App`
+(`#[serde(skip)]`), set it in `update` on mutating actions, and:
+
+```rust
+impl App {
+    fn save_if_dirty(&mut self) -> color_eyre::Result<()> {
+        if self.dirty {
+            storage::store_state(self)?;
+            self.dirty = false;
+        }
+        Ok(())
+    }
+}
+```
+
+Two tiers for *when* to call it:
+
+- **Simplest, and fine now:** call `save_if_dirty()` once per loop iteration
+  (after `update`) *and* on quit. The state file is a few KB; a write is
+  sub-millisecond. The real smell was coupling saves to navigation handlers —
+  writing "when something changed" from one place fixes that. Don't build more.
+- **Batching (not needed until the statblock DB):** switch to
+  `event::poll(timeout)? + event::read()` so the loop can wake on a timer with no
+  input, then save at most every N seconds. This introduces a **tick** (also
+  useful later for timers/animation) but is scope creep for Phase 0 — note and
+  move on.
+
+### Step 6 — Collapse the redundant selection state
+
+"Position" is currently tracked in three hand-synced places:
+`Encounter::cursor_index`, `Encounter::initiative_index`, and
+`App::main_table_state` — which is why `sync_table_state()` (`app.rs:107`) is
+sprinkled across 4+ call sites. Make `Encounter` the **single source of truth**,
+delete `main_table_state` from `App`, and derive `TableState` in the renderer
+(Step 4). `sync_table_state` and the `From<SerializableApp>` juggling around it
+(`app.rs:88-102`) then largely disappear. Store facts once, compute the rest.
+
+While here, give `state.json` the same versioned wrapper `EncounterRecord` already
+has (`storage.rs:12`): an `AppStateRecord { schema_version, state }` costs ~10
+lines now and prevents a "why won't my old save load" headache after the first
+model-field change.
+
+### Step 7 — Test `update` (this is where library instincts pay off)
+
+Because `update` is `(&mut App, Action) -> Effect` with **no terminal and no
+I/O**, the entire interaction layer is unit-testable the same way `DiceExpr` was:
+
+```rust
+#[test]
+fn advancing_turn_moves_and_marks_dirty() {
+    let mut app = App::default();
+    app.add_creature(Creature::new_player("Alice", 10, 10, None, None, None));
+    app.add_creature(Creature::new_player("Bob", 10, 10, None, None, None));
+
+    assert_eq!(app.update(Action::AdvanceTurn), Effect::None);
+    assert_eq!(app.current_encounter.initiative_index, 1);
+    assert!(app.dirty);
+}
+```
+
+Key handling tangled in `main.rs` can't be tested (it needs real `event::read`);
+after Phase 0 every behavior is a pure call. Aim for a test per `Action` — that
+suite is what lets you refactor fearlessly through Phases 1–4.
+
+### Migration strategy: green at every commit
+
+Do **not** big-bang this. Sequence so each commit compiles and all tests pass:
+
+1. Add `action.rs` + `event.rs` + `update`, but have `update` call the *existing*
+   methods. Route `main.rs` through it. Behavior is byte-for-byte identical — only
+   the plumbing changed. Commit.
+2. Introduce the `dirty` flag; remove inline `store_state` calls from old
+   handlers. Commit.
+3. Make `draw_ui` take `&App`; derive `TableState`; delete `main_table_state`.
+   Commit.
+4. Add the `AppStateRecord` version wrapper. Commit.
+
+### Pitfalls to watch
+
+- **`event::read()` blocks** — the loop only wakes on input (good: no CPU spin)
+  until you want timers; that's what motivates the `poll` tick.
+- **Don't leak `crossterm`/`ratatui` types into the model.** `EditorInput(Event)`
+  is the one deliberate exception, confined to the editor.
+- **Resist a premature effect system.** `Effect { None, Quit }` is enough; add
+  variants when a feature needs one.
+- **Don't mutate in `draw`** — the `&App` signature enforces it.
+- **`#[serde(skip)]` transient fields** (`dirty`, later any pure-UI scratch state)
+  so they never pollute the save file or schema version.
 
 ---
 
