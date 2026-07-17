@@ -1,11 +1,8 @@
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, ModifierKeyCode};
-use tui_input::backend::crossterm::EventHandler;
+use crossterm::event::{self, Event, KeyCode, KeyEvent};
 
-use crate::{
-    app::{App, EditorField, Panel},
-    ui::draw_ui,
-};
+use crate::{action::Action, app::Panel, ui::draw_ui};
 
+mod action;
 mod app;
 mod model;
 mod storage;
@@ -22,13 +19,16 @@ fn main() -> color_eyre::Result<()> {
         term.draw(|frame| draw_ui(frame, &mut app))?;
         if let Ok(e) = event::read() {
             if let Some(key_event) = e.as_key_event() {
-                match app.current_panel {
-                    Panel::Editor => handle_editor_events(&mut app, &key_event, &e),
+                // Capture current action
+                let action = match app.current_panel {
+                    Panel::Editor => handle_editor_keys(&key_event, &e)?,
                     Panel::InitiativeTable | Panel::Sidebar => {
-                        if handle_panel_and_sidebar_events(&mut app, &key_event, &e)? {
-                            break;
-                        }
+                        handle_main_view_keys(&key_event, &e)?
                     }
+                };
+
+                if let Some(a) = action {
+                    app.update(a);
                 }
             }
         }
@@ -38,79 +38,38 @@ fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-/// Returns if the loop is to be broken
-fn handle_panel_and_sidebar_events(
-    app: &mut App,
-    key_event: &KeyEvent,
-    e: &Event,
-) -> color_eyre::Result<bool> {
+/// Returns Some(true) if the loop is to be broken
+fn handle_main_view_keys(key_event: &KeyEvent, _: &Event) -> color_eyre::Result<Option<Action>> {
     match key_event.code {
-        KeyCode::Char('q') => return Ok(true),
-        KeyCode::Char('j') | KeyCode::Down => {
-            app.select_next_row();
-            storage::store_state(&app)?;
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
-            app.select_previous_row();
-            storage::store_state(&app)?;
-        }
-        KeyCode::Char(' ') => {
-            app.increment_initiative_order();
-            storage::store_state(&app)?;
-        }
-        KeyCode::Tab => {
-            app.current_panel = match app.current_panel {
-                Panel::InitiativeTable => Panel::Sidebar,
-                Panel::Sidebar => Panel::InitiativeTable,
-                _ => app.current_panel,
-            }
-        }
-        KeyCode::Char('n') => app.current_panel = Panel::Editor,
-        _ => return Ok(false),
-    };
-    Ok(false)
+        KeyCode::Char('q') => Ok(Some(Action::Quit)),
+        KeyCode::Char('j') | KeyCode::Down => Ok(Some(Action::SelectNextRow)),
+        KeyCode::Char('k') | KeyCode::Up => Ok(Some(Action::SelectPreviousRow)),
+        KeyCode::Char(' ') => Ok(Some(Action::AdvanceTurn)),
+        KeyCode::Tab => Ok(Some(Action::SwitchPanel)),
+        KeyCode::Char('n') => Ok(Some(Action::OpenEditor)),
+        _ => Ok(None),
+    }
 }
 
-fn handle_editor_events(app: &mut App, key_event: &KeyEvent, e: &Event) {
+fn handle_editor_keys(key_event: &KeyEvent, e: &Event) -> color_eyre::Result<Option<Action>> {
     match key_event.code {
         KeyCode::Char('q') | KeyCode::Esc => {
-            app.current_panel = Panel::InitiativeTable;
+            // app.current_panel = Panel::InitiativeTable;
             // TODO: Clear input states
+            Ok(Some(Action::CloseEditor))
         }
         KeyCode::Tab | KeyCode::Down => {
-            app.editor_state.next_field();
+            // app.editor_state.next_field();
+            Ok(Some(Action::EditorNextField))
         }
         KeyCode::BackTab | KeyCode::Up => {
-            app.editor_state.previous_field();
+            // app.editor_state.previous_field();
+            Ok(Some(Action::EditorPrevField))
         }
         KeyCode::Enter => {
-            app.submit_editor();
+            // app.submit_editor();
+            Ok(Some(Action::SubmitEditor))
         }
-        _ => handle_editor_input_event_delegation(app, &e),
+        _ => Ok(Some(Action::EditorInput(e.clone()))),
     }
 }
-
-fn handle_editor_input_event_delegation(app: &mut App, e: &Event) {
-    match app.editor_state.active_input {
-        EditorField::Name => {
-            app.editor_state.name_input.handle_event(&e);
-        }
-        EditorField::CurrentHP => {
-            app.editor_state.cur_hp_input.handle_event(&e);
-        }
-        EditorField::MaxHP => {
-            app.editor_state.max_hp_input.handle_event(&e);
-        }
-        EditorField::AC => {
-            app.editor_state.ac_input.handle_event(&e);
-        }
-        EditorField::CR => {
-            app.editor_state.cr_input.handle_event(&e);
-        }
-        EditorField::Amount => {
-            app.editor_state.amount_input.handle_event(&e);
-        }
-        _ => (),
-    }
-}
-fn handle_main_view_key_event(event: &KeyEvent) {}

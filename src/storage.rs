@@ -5,7 +5,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{app::App, model::Encounter};
+use crate::app::App;
+
+mod encounter;
+pub(crate) use encounter::Encounter;
 
 const ENCOUNTER_RECORD_VERSION: u16 = 1;
 
@@ -88,7 +91,7 @@ pub fn store_encounter(
 #[cfg(test)]
 mod tests {
     use super::{EncounterRecord, load_encounter};
-    use crate::model::Encounter;
+    use crate::storage::Encounter;
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},

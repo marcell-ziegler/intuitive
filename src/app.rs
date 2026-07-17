@@ -1,8 +1,10 @@
+use crossterm::event::Event;
 use ratatui::widgets::TableState;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
-use crate::{model::Creature, model::Encounter};
+use crate::{action::Action, model::Creature, storage::Encounter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Panel {
@@ -17,6 +19,7 @@ pub struct App {
     pub current_encounter: Encounter,
     pub current_panel: Panel,
     pub editor_state: EditorState,
+    pub dirty: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -98,6 +101,7 @@ impl From<SerializableApp> for App {
             current_encounter: value.current_encounter,
             current_panel: value.current_panel,
             editor_state: EditorState::default(),
+            dirty: true,
         };
         app.sync_table_state();
         app
@@ -118,32 +122,83 @@ impl App {
     }
 
     /// Add a creature to the state
-    pub fn add_creature(&mut self, val: Creature) {
+    fn add_creature(&mut self, val: Creature) {
         self.current_encounter.add_creature(val);
         self.sync_table_state();
     }
 
     /// Select the next creature row for viewing
-    pub fn select_next_row(&mut self) {
+    fn select_next_row(&mut self) {
         self.current_encounter.select_next_cursor();
     }
 
     /// Select the previous creature row for viewing
-    pub fn select_previous_row(&mut self) {
+    fn select_previous_row(&mut self) {
         self.current_encounter.select_previous_cursor();
     }
 
-    pub fn increment_initiative_order(&mut self) {
+    fn increment_initiative_order(&mut self) {
         self.current_encounter.select_next_initiative();
         self.sync_table_state();
     }
 
-    pub fn select_panel(&mut self, panel: Panel) {
+    fn select_panel(&mut self, panel: Panel) {
         self.current_panel = panel;
     }
 
-    pub fn submit_editor(&mut self) {
+    fn submit_editor(&mut self) {
         todo!();
+    }
+
+    fn swap_panel(&mut self) {
+        self.current_panel = match self.current_panel {
+            Panel::InitiativeTable => Panel::Sidebar,
+            Panel::Sidebar => Panel::InitiativeTable,
+            _ => self.current_panel,
+        }
+    }
+
+    fn delegate_editor_input_event(&mut self, e: &Event) {
+        match self.editor_state.active_input {
+            EditorField::Name => {
+                self.editor_state.name_input.handle_event(&e);
+            }
+            EditorField::CurrentHP => {
+                self.editor_state.cur_hp_input.handle_event(&e);
+            }
+            EditorField::MaxHP => {
+                self.editor_state.max_hp_input.handle_event(&e);
+            }
+            EditorField::AC => {
+                self.editor_state.ac_input.handle_event(&e);
+            }
+            EditorField::CR => {
+                self.editor_state.cr_input.handle_event(&e);
+            }
+            EditorField::Amount => {
+                self.editor_state.amount_input.handle_event(&e);
+            }
+            _ => (),
+        }
+    }
+
+    pub fn update(&mut self, action: Action) {
+        match action {
+            Action::SelectNextRow => self.select_next_row(),
+            Action::SelectPreviousRow => self.select_previous_row(),
+            Action::AdvanceTurn => self.increment_initiative_order(),
+            Action::SwitchPanel => self.swap_panel(),
+            Action::OpenEditor => self.current_panel = Panel::Editor,
+            Action::CloseEditor => {
+                // TODO: Clear input states
+                self.current_panel = Panel::InitiativeTable;
+            }
+            Action::EditorNextField => self.editor_state.next_field(),
+            Action::EditorPrevField => self.editor_state.previous_field(),
+            Action::SubmitEditor => todo!(),
+            Action::EditorInput(e) => self.delegate_editor_input_event(&e),
+            Action::Quit => self.dirty = false,
+        }
     }
 }
 
@@ -172,6 +227,7 @@ impl Default for App {
             current_encounter: Encounter::default(),
             current_panel: Panel::InitiativeTable,
             editor_state: EditorState::default(),
+            dirty: true,
         };
         app.sync_table_state();
         app
