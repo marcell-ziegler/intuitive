@@ -138,6 +138,71 @@ None of this is a rewrite; it's a reshaping that can land incrementally
 - Derive `TableState` from `Encounter` instead of storing it.
 - **Exit criteria:** identical behavior, `main.rs` under ~40 lines, tests green.
 
+#### Phase 0 — progress log (updated 2026-07-18, branch `event-loop-refactor`)
+
+**Status: ~40% done — step 1 landed, but with two regressions to fix before continuing.**
+Commit `4006edd "Refactor event loop pt. 1"` did the first slice of the migration.
+14 tests still green. Mapped against the Step 1–7 guide in §4:
+
+- ✅ **`action.rs` exists** with the full `Action` enum (matches the guide, incl.
+  `EditorInput(Event)`).
+- ✅ **`App::update(Action)` exists** and is the single mutation entry point;
+  `main.rs` routes every key through it. The old scattered `todo`/empty handlers
+  are gone.
+- ✅ **Keys → `Action` extracted from `update`** into `handle_main_view_keys` /
+  `handle_editor_keys`. But see below — these still live in `main.rs`, not `event.rs`.
+- ⚠️ **`event.rs` NOT created.** The key→action mapping sits in `main.rs` as two
+  free functions taking `&KeyEvent` instead of one mode-aware `map_event(&app, &event)`.
+  They don't take `&app`, so per-panel remapping isn't centralized yet. Move them to
+  `event.rs` per Step 2.
+- ⚠️ **`dirty` flag half-wired.** The field exists on `App` (though NOT
+  `#[serde(skip)]` — it's just absent from `SerializableApp`, which works but
+  differs from the guide). There is **no `save_if_dirty()` method**, and `update`
+  does not set `dirty` on mutating actions — only `Action::Quit` touches it (see bug).
+- ❌ **`Effect` enum defined but unused.** `App::update` returns `()`, not `Effect`.
+  The loop can't observe `Effect::Quit`. Wire this up per Step 3.
+- ❌ **`draw_ui` still takes `&mut App`** and `render_initiative_table` still calls
+  `app.sync_table_state()` mid-render (`ui.rs:150,155`). Step 4 not started.
+- ❌ **Redundant selection state intact.** `main_table_state` still lives on `App`
+  and is hand-synced. Step 6 not started.
+- ❌ **No `AppStateRecord` version wrapper.** `state.json` is still serialized raw
+  via `SerializableApp` with no `schema_version`. Step 4 (persistence half) not started.
+- ❌ **No `update` unit tests.** Only the pre-existing serde round-trip test exists.
+  Step 7 not started — add a test per `Action`.
+
+**🔴 Two regressions introduced by the refactor — fix these first:**
+
+1. **The event loop never exits and never saves.** `Action::Quit` sets
+   `self.dirty = false` but the `loop {}` in `main.rs` has no `break`, so `q` no
+   longer quits (only Ctrl-C kills it). Consequently `storage::store_state(&app)`
+   at `main.rs:36` is **unreachable dead code**. This is exactly the bug the
+   `Effect::Quit` pattern is meant to prevent: make `update` return `Effect`, and
+   `break` on `Effect::Quit`, then `save_if_dirty()` after the loop.
+2. **Persistence is currently a no-op.** The old per-keystroke `store_state` calls
+   were removed (correct intent) but nothing replaced them — no `save_if_dirty`,
+   and the only remaining `store_state` call is unreachable (bug #1). The app
+   loads state on launch but **never writes it back**. Restoring the `dirty`
+   set-on-mutation + `save_if_dirty()` path (Step 5) closes this.
+
+**⚠️ Structural deviation to ratify or revert:** `Encounter` was moved from
+`model/encounter.rs` to `storage/encounter.rs` (now `storage::Encounter`, re-exported
+from `storage.rs`). This couples the domain type to the storage module and
+contradicts both CLAUDE.md's code-layout map and §2's target (`storage/encounter.rs`
+was meant for *encounter-file I/O*, not the `Encounter` domain model). The domain
+`Encounter` should live under `model/`; keep `storage/` for records/persistence.
+Decide deliberately: either move it back to `model/` or update the plan + CLAUDE.md
+to reflect the new home. Right now the two disagree.
+
+**Recommended next commits (small, test-green, in order):**
+1. Fix the quit/save regression: `update` → `Effect`, `break` on `Effect::Quit`,
+   set `dirty` on mutating actions, add `save_if_dirty()`, call it after the loop
+   (and optionally once per iteration). Restores quitting *and* persistence.
+2. Extract `event.rs` with a single `map_event(&app, &event) -> Option<Action>`.
+3. Resolve the `Encounter` location question (see above).
+4. `draw_ui(&App)` + derive `TableState`; delete `main_table_state` (Steps 4/6).
+5. `AppStateRecord` version wrapper for `state.json`.
+6. Backfill `update` unit tests (Step 7).
+
 ### Phase 1 — Make the core loop actually work (highest user value)
 - Implement `submit_editor()`: parse fields, choose Player vs Monster (add a
   type toggle + the missing `amount_input` to spawn N copies like "Goblin 1..3"),
