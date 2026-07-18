@@ -1,11 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEvent};
-
-use crate::{
-    action::Action,
-    app::{Effect, Panel},
-    event::map_event,
-    ui::draw_ui,
-};
+use crate::{app::Effect, event::map_event, ui::draw_ui};
 
 mod action;
 mod app;
@@ -22,13 +15,21 @@ fn main() -> color_eyre::Result<()> {
     app.sync_table_state();
 
     loop {
-        term.draw(|frame| draw_ui(frame, &mut app))?;
+        if app.dirty {
+            term.draw(|frame| draw_ui(frame, &mut app))?;
+            app.dirty = false;
+        }
+
         if let Ok(e) = crossterm::event::read() {
             // Capture current action
             let action = map_event(&app, &e);
             if let Some(a) = action {
-                if app.update(a) == Effect::Quit {
-                    break;
+                match app.update(a) {
+                    Effect::Quit => break,
+                    Effect::UpdateState => {
+                        storage::store_state(&app)?;
+                    }
+                    Effect::None => {}
                 }
             }
         }

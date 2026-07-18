@@ -54,6 +54,14 @@ impl EditorState {
             EditorField::Amount | EditorField::Unfocused => EditorField::CR,
         };
     }
+    pub fn clear(&mut self) {
+        self.name_input.reset();
+        self.max_hp_input.reset();
+        self.cur_hp_input.reset();
+        self.ac_input.reset();
+        self.cr_input.reset();
+        self.amount_input.reset();
+    }
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
@@ -113,6 +121,7 @@ impl From<SerializableApp> for App {
 pub enum Effect {
     None,
     Quit,
+    UpdateState,
 }
 
 impl App {
@@ -193,40 +202,49 @@ impl App {
         match action {
             Action::SelectNextRow => {
                 self.select_next_row();
-                Effect::None
+                self.dirty = true;
+                Effect::UpdateState
             }
             Action::SelectPreviousRow => {
                 self.select_previous_row();
-                Effect::None
+                self.dirty = true;
+                Effect::UpdateState
             }
             Action::AdvanceTurn => {
                 self.increment_initiative_order();
-                Effect::None
+                self.dirty = true;
+                Effect::UpdateState
             }
             Action::SwitchPanel => {
                 self.swap_panel();
+                self.dirty = true;
                 Effect::None
             }
             Action::OpenEditor => {
                 self.current_panel = Panel::Editor;
+                self.dirty = true;
                 Effect::None
             }
             Action::CloseEditor => {
-                // TODO: Clear input states
+                self.editor_state.clear();
+                self.dirty = true;
                 self.current_panel = Panel::InitiativeTable;
                 Effect::None
             }
             Action::EditorNextField => {
                 self.editor_state.next_field();
+                self.dirty = true;
                 Effect::None
             }
             Action::EditorPrevField => {
                 self.editor_state.previous_field();
+                self.dirty = true;
                 Effect::None
             }
             Action::SubmitEditor => todo!(),
             Action::EditorInput(e) => {
                 self.delegate_editor_input_event(&e);
+                self.dirty = true;
                 Effect::None
             }
             Action::Quit => Effect::Quit,

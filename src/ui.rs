@@ -1,16 +1,23 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Clear, Padding, Paragraph, Row, Table},
+    layout::{Constraint, Layout},
+    style::{Color, Style},
+    text::Span,
+    widgets::{Block, BorderType, Paragraph},
 };
-use tui_input::Input;
 
-use crate::app::{App, EditorField, Panel};
+use crate::app::{App, Panel};
+
+mod editor;
+mod sidebar;
+mod table;
+
+use editor::Editor;
+use sidebar::Sidebar;
+use table::InitiativeTable;
 
 pub fn draw_ui(frame: &mut Frame, app: &mut App) {
-    // Main UI Chunks, header and main space
+    // Main UI chunks: header and main space.
     let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(frame.area());
 
     let title = Paragraph::new(Span::styled(
@@ -22,245 +29,28 @@ pub fn draw_ui(frame: &mut Frame, app: &mut App) {
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::LightCyan)),
     );
-
     frame.render_widget(title, chunks[0]);
 
-    // Main content chunks, table and sidebar
+    // Main content chunks: table and sidebar.
     let content_chunks = Layout::horizontal([Constraint::Min(25), Constraint::Length(36)])
         .spacing(1)
         .split(chunks[1]);
 
-    // Sidebar
-    let sidebar_placeholder = Paragraph::new("").block(
-        Block::bordered()
-            .title("─Sidebar")
-            .border_type(BorderType::Rounded)
-            .border_style(if app.current_panel == Panel::Sidebar {
-                Color::LightYellow
-            } else {
-                Color::LightCyan
-            }),
-    );
-
-    frame.render_widget(sidebar_placeholder, content_chunks[1]);
-
-    // Main table
-    render_initiative_table(frame, app, content_chunks[0]);
-
-    if app.current_panel == Panel::Editor {
-        render_editor(frame, app)
-    }
-}
-
-fn render_input(frame: &mut Frame, input: &Input, name: &str, active: bool, area: Rect) {
-    // keep 2 for borders and 1 for cursor
-    let width = area.width.max(3) - 3;
-    let scroll = input.visual_scroll(width as usize);
-    let style: Style = if active {
-        Color::Yellow.into()
-    } else {
-        Color::White.into()
-    };
-    let input = Paragraph::new(input.value())
-        .style(style)
-        .scroll((0, scroll as u16))
-        .block(Block::bordered().title(name));
-    frame.render_widget(input, area);
-}
-
-fn render_editor(frame: &mut Frame, app: &mut App) {
-    let editor_area = centered_rect_fixed_height(40, 2 + 3 * 5, frame.area());
-    let input_chunks = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Min(0),
-    ])
-    .split(
-        Layout::horizontal([
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .split(editor_area)[1],
-    );
-
-    frame.render_widget(Clear::default(), editor_area);
     frame.render_widget(
-        Block::bordered()
-            .border_type(BorderType::Rounded)
-            .border_style(Color::LightBlue)
-            .title("Edit Creature"),
-        editor_area,
+        Sidebar::new(app.current_panel == Panel::Sidebar),
+        content_chunks[1],
     );
-    render_input(
-        frame,
-        &app.editor_state.name_input,
-        "Name",
-        app.editor_state.active_input == EditorField::Name,
-        input_chunks[1],
-    );
-    let hp_chunks = Layout::horizontal([
-        Constraint::Fill(1),
-        Constraint::Length(3),
-        Constraint::Fill(1),
-    ])
-    .split(input_chunks[2]);
-    render_input(
-        frame,
-        &app.editor_state.cur_hp_input,
-        "Current HP",
-        app.editor_state.active_input == EditorField::CurrentHP,
-        hp_chunks[0],
-    );
-    frame.render_widget(Paragraph::new("   \n / \n   ").bold().white(), hp_chunks[1]);
-    render_input(
-        frame,
-        &app.editor_state.max_hp_input,
-        "Max HP",
-        app.editor_state.active_input == EditorField::MaxHP,
-        hp_chunks[2],
-    );
-    render_input(
-        frame,
-        &app.editor_state.ac_input,
-        "AC",
-        app.editor_state.active_input == EditorField::AC,
-        input_chunks[3],
-    );
-    render_input(
-        frame,
-        &app.editor_state.cr_input,
-        "Lvl / CR",
-        app.editor_state.active_input == EditorField::CR,
-        input_chunks[4],
-    );
-    render_input(
-        frame,
-        &app.editor_state.amount_input,
-        "Amount",
-        app.editor_state.active_input == EditorField::Amount,
-        input_chunks[5],
-    );
-}
-
-fn render_initiative_table(frame: &mut Frame, app: &mut App, area: Rect) {
-    let header = Row::new(["Name", "Lvl", "HP", "AC", "Initiative"])
-        .bold()
-        .bottom_margin(1);
 
     app.sync_table_state();
-
-    let mut rows = Vec::new();
-    for (i, creature) in app.current_encounter.creatures.iter().enumerate() {
-        let is_selected = app.current_encounter.cursor_index == i;
-        let is_initiative = app.current_encounter.initiative_index == i;
-
-        let (icon, row_style) = match (is_selected, is_initiative) {
-            (true, true) => ("󰞇", Style::new().on_yellow().dark_gray()),
-            (true, false) => (" ", Style::new().on_dark_gray()),
-            (false, true) => ("󰞇 ", Style::new().on_yellow().dark_gray()),
-            (false, false) => ("  ", Style::default()),
-        };
-
-        rows.push(
-            Row::new([
-                format!("{}{}", icon, creature.name()),
-                if creature.get_level_or_cr().fract() <= f64::EPSILON {
-                    creature.get_level_or_cr().floor().to_string()
-                } else {
-                    match creature.get_level_or_cr() {
-                        0.25 => String::from("1/4"),
-                        0.5 => String::from("1/2"),
-                        0.75 => String::from("3/4"),
-                        _ => creature.get_level_or_cr().floor().to_string(),
-                    }
-                },
-                format!("{}/{}", creature.hp(), creature.max_hp()),
-                creature.ac().to_string(),
-                match creature.get_initiative() {
-                    Some(i) => i.to_string(),
-                    None => String::from("n/a"),
-                },
-            ])
-            .style(row_style),
-        )
-    }
-
-    let tab = Table::new(
-        rows,
-        [
-            Constraint::Fill(1),
-            Constraint::Length(6),
-            Constraint::Length(6),
-            Constraint::Length(6),
-            Constraint::Length(10),
-        ],
-    )
-    .header(header)
-    .column_spacing(1)
-    .block(
-        Block::bordered()
-            .title("─Initiative Order")
-            .title_bottom(Line::from(
-                Span::from("─")
-                    + Span::from("k/j").bold().white()
-                    + Span::from("─")
-                    + Span::from("Up/Down").white()
-                    + Span::from("──")
-                    + Span::from("Tab").bold().white()
-                    + Span::from("─")
-                    + Span::from("Swap Panel").white()
-                    + Span::from("──")
-                    + Span::from("n").bold().white()
-                    + Span::from("─")
-                    + Span::from("Add Creature").white()
-                    + Span::from("──"),
-            ))
-            .border_type(BorderType::Rounded)
-            .border_style(if app.current_panel == Panel::InitiativeTable {
-                Color::LightYellow
-            } else {
-                Color::LightCyan
-            })
-            .padding(Padding::symmetric(1, 0)),
+    let focused = app.current_panel == Panel::InitiativeTable;
+    frame.render_stateful_widget(
+        InitiativeTable::new(&app.current_encounter, focused),
+        content_chunks[0],
+        &mut app.main_table_state,
     );
 
-    frame.render_stateful_widget(tab, area, &mut app.main_table_state);
-}
-
-/// Return a centered `Rect` area.
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let popup_layout = Layout::vertical([
-        Constraint::Percentage((100 - percent_y) / 2),
-        Constraint::Percentage(percent_y),
-        Constraint::Percentage((100 - percent_y) / 2),
-    ])
-    .split(area);
-
-    Layout::horizontal([
-        Constraint::Percentage((100 - percent_x) / 2),
-        Constraint::Percentage(percent_x),
-        Constraint::Percentage((100 - percent_x) / 2),
-    ])
-    .split(popup_layout[1])[1]
-}
-/// Return a centered `Rect` area with width as a percentage and height in lines.
-fn centered_rect_fixed_height(percent_x: u16, height: u16, area: Rect) -> Rect {
-    let popup_layout = Layout::vertical([
-        Constraint::Length((area.height.saturating_sub(height)) / 2),
-        Constraint::Length(height),
-        Constraint::Min(0),
-    ])
-    .split(area);
-
-    Layout::horizontal([
-        Constraint::Percentage((100 - percent_x) / 2),
-        Constraint::Percentage(percent_x),
-        Constraint::Percentage((100 - percent_x) / 2),
-    ])
-    .split(popup_layout[1])[1]
+    if app.current_panel == Panel::Editor {
+        let area = frame.area();
+        frame.render_widget(Editor::new(&app.editor_state), area);
+    }
 }
