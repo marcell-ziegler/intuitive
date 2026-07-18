@@ -1,12 +1,10 @@
+use crate::app::{EditorField, EditorInput, EditorState};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     widgets::{Block, BorderType, Clear, Paragraph, Widget},
 };
-use tui_input::Input;
-
-use crate::app::{EditorField, EditorState};
 
 /// The modal creature editor.
 ///
@@ -52,7 +50,7 @@ impl Widget for Editor<'_> {
 
         let s = self.state;
         render_input(
-            &s.name_input,
+            &s.name,
             "Name",
             s.active_input == EditorField::Name,
             input_chunks[1],
@@ -66,7 +64,7 @@ impl Widget for Editor<'_> {
         ])
         .split(input_chunks[2]);
         render_input(
-            &s.cur_hp_input,
+            &s.cur_hp,
             "Current HP",
             s.active_input == EditorField::CurrentHP,
             hp_chunks[0],
@@ -77,28 +75,28 @@ impl Widget for Editor<'_> {
             .white()
             .render(hp_chunks[1], buf);
         render_input(
-            &s.max_hp_input,
+            &s.max_hp,
             "Max HP",
             s.active_input == EditorField::MaxHP,
             hp_chunks[2],
             buf,
         );
         render_input(
-            &s.ac_input,
+            &s.ac,
             "AC",
             s.active_input == EditorField::AC,
             input_chunks[3],
             buf,
         );
         render_input(
-            &s.cr_input,
+            &s.cr,
             "Lvl / CR",
             s.active_input == EditorField::CR,
             input_chunks[4],
             buf,
         );
         render_input(
-            &s.amount_input,
+            &s.amount,
             "Amount",
             s.active_input == EditorField::Amount,
             input_chunks[5],
@@ -108,19 +106,26 @@ impl Widget for Editor<'_> {
 }
 
 /// Render a single bordered text field, scrolled to keep the tail visible.
-fn render_input(input: &Input, name: &str, active: bool, area: Rect, buf: &mut Buffer) {
+///
+/// The border turns red when the field is invalid; otherwise the text is
+/// highlighted yellow while the field is active.
+fn render_input(field: &EditorInput, name: &str, active: bool, area: Rect, buf: &mut Buffer) {
     // keep 2 for borders and 1 for cursor
     let width = area.width.max(3) - 3;
-    let scroll = input.visual_scroll(width as usize);
-    let style: Style = if active {
+    let scroll = field.input.visual_scroll(width as usize);
+    let text_style: Style = if active {
         Color::Yellow.into()
     } else {
         Color::White.into()
     };
-    Paragraph::new(input.value())
-        .style(style)
+    let mut block = Block::bordered().title(name);
+    if !field.valid {
+        block = block.border_style(Style::new().fg(Color::Red));
+    }
+    Paragraph::new(field.input.value())
+        .style(text_style)
         .scroll((0, scroll as u16))
-        .block(Block::bordered().title(name))
+        .block(block)
         .render(area, buf);
 }
 

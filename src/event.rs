@@ -24,7 +24,7 @@ fn handle_main_view_keys(key_event: &KeyEvent, _: &Event) -> Option<Action> {
         KeyCode::Char('k') | KeyCode::Up => Some(Action::SelectPreviousRow),
         KeyCode::Char(' ') => Some(Action::AdvanceTurn),
         KeyCode::Tab => Some(Action::SwitchPanel),
-        KeyCode::Char('n') => Some(Action::OpenEditor),
+        KeyCode::Char('n') => Some(Action::OpenEditorWithNewCreature),
         _ => None,
     }
 }

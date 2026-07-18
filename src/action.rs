@@ -6,7 +6,8 @@ pub enum Action {
     SwitchPanel,
 
     // Editor lifecycle
-    OpenEditor,
+    OpenEditorAtIndex(u16), // Index to edit at
+    OpenEditorWithNewCreature,
     CloseEditor,
     EditorNextField,
     EditorPrevField,
