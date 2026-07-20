@@ -11,57 +11,20 @@ pub enum Panel {
     Editor,
 }
 
-#[derive(Debug, Clone)]
-pub struct App {
-    pub main_table_state: TableState,
-    pub current_encounter: Encounter,
-    pub current_panel: Panel,
-    pub editor_state: EditorState,
-    pub dirty: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SerializableApp {
-    current_encounter: Encounter,
-    current_panel: Panel,
-}
-
-impl From<&App> for SerializableApp {
-    fn from(app: &App) -> Self {
-        Self {
-            current_encounter: app.current_encounter.clone(),
-            current_panel: app.current_panel,
-        }
-    }
-}
-
-impl From<SerializableApp> for App {
-    fn from(value: SerializableApp) -> Self {
-        let mut main_table_state = TableState::default();
-        if value.current_encounter.creatures.is_empty() {
-            main_table_state.select(None);
-        } else {
-            main_table_state.select(Some(value.current_encounter.initiative_index));
-        }
-
-        let mut app = Self {
-            main_table_state,
-            current_encounter: value.current_encounter,
-            current_panel: value.current_panel,
-            editor_state: EditorState::default(),
-            dirty: true,
-        };
-        app.sync_table_state();
-        app
-    }
-}
-
 // The side-effect the mainloop has to perform after App::update()
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Effect {
     None,
     Quit,
     UpdateState,
+}
+
+#[derive(Debug, Clone)]
+pub struct App {
+    pub main_table_state: TableState,
+    pub current_encounter: Encounter,
+    pub current_panel: Panel,
+    pub editor_state: EditorState,
 }
 
 impl App {
@@ -150,28 +113,23 @@ impl App {
         match action {
             Action::SelectNextRow => {
                 self.select_next_row();
-                self.dirty = true;
                 Effect::UpdateState
             }
             Action::SelectPreviousRow => {
                 self.select_previous_row();
-                self.dirty = true;
                 Effect::UpdateState
             }
             Action::AdvanceTurn => {
                 self.increment_initiative_order();
-                self.dirty = true;
                 Effect::UpdateState
             }
             Action::SwitchPanel => {
                 self.swap_panel();
-                self.dirty = true;
                 Effect::None
             }
             Action::OpenEditorWithNewCreature => {
                 self.editor_state.clear();
                 self.current_panel = Panel::Editor;
-                self.dirty = true;
                 Effect::None
             }
             Action::OpenEditorAtIndex(index) => {
@@ -180,43 +138,71 @@ impl App {
                     self.editor_state.load_creature(&creature);
                 }
                 self.current_panel = Panel::Editor;
-                self.dirty = true;
                 Effect::None
             }
             Action::CloseEditor => {
                 self.editor_state.clear();
-                self.dirty = true;
                 self.current_panel = Panel::InitiativeTable;
                 Effect::None
             }
             Action::EditorNextField => {
                 self.editor_state.next_field();
-                self.dirty = true;
                 Effect::None
             }
             Action::EditorPrevField => {
                 self.editor_state.previous_field();
-                self.dirty = true;
                 Effect::None
             }
             Action::SubmitEditor => {
                 if self.submit_editor() {
-                    self.dirty = true;
                     Effect::UpdateState
                 } else {
                     // Validation failed — stay in the editor and redraw so the
                     // invalid fields show their red borders.
-                    self.dirty = true;
                     Effect::None
                 }
             }
             Action::EditorInput(e) => {
                 self.delegate_editor_input_event(&e);
-                self.dirty = true;
                 Effect::None
             }
             Action::Quit => Effect::Quit,
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SerializableApp {
+    current_encounter: Encounter,
+    current_panel: Panel,
+}
+
+impl From<&App> for SerializableApp {
+    fn from(app: &App) -> Self {
+        Self {
+            current_encounter: app.current_encounter.clone(),
+            current_panel: app.current_panel,
+        }
+    }
+}
+
+impl From<SerializableApp> for App {
+    fn from(value: SerializableApp) -> Self {
+        let mut main_table_state = TableState::default();
+        if value.current_encounter.creatures.is_empty() {
+            main_table_state.select(None);
+        } else {
+            main_table_state.select(Some(value.current_encounter.initiative_index));
+        }
+
+        let mut app = Self {
+            main_table_state,
+            current_encounter: value.current_encounter,
+            current_panel: value.current_panel,
+            editor_state: EditorState::default(),
+        };
+        app.sync_table_state();
+        app
     }
 }
 
@@ -245,7 +231,6 @@ impl Default for App {
             current_encounter: Encounter::default(),
             current_panel: Panel::InitiativeTable,
             editor_state: EditorState::default(),
-            dirty: true,
         };
         app.sync_table_state();
         app

@@ -16,10 +16,7 @@ fn main() -> color_eyre::Result<()> {
     app.sync_table_state();
 
     loop {
-        if app.dirty {
-            term.draw(|frame| draw_ui(frame, &mut app))?;
-            app.dirty = false;
-        }
+        term.draw(|frame| draw_ui(frame, &mut app))?;
 
         if let Ok(e) = crossterm::event::read() {
             // Capture current action
