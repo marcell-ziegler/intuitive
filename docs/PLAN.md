@@ -87,7 +87,7 @@ Adopt a lightweight **Model → Update(Action) → View** loop (Elm/TEA-style),
 which ratatui projects converge on naturally and which makes each feature a
 localized change instead of another `match` arm in `main.rs`.
 
-```
+```txt
 src/
   main.rs            // terminal init + event loop only
   event.rs           // crossterm Event -> Action (per-mode keymaps)
@@ -133,6 +133,7 @@ None of this is a rewrite; it's a reshaping that can land incrementally
 ## 3. Phased implementation plan
 
 ### Phase 0 — Foundation refactor (1 focused pass)
+
 - Add `action.rs` + `event.rs`; route `main.rs` through `App::update`.
 - Version-wrap `state.json`; add a `save-on-quit + dirty-flag` persistence path.
 - Derive `TableState` from `Encounter` instead of storing it.
@@ -188,15 +189,16 @@ Commit `4006edd "Refactor event loop pt. 1"` did the first slice of the migratio
 `model/encounter.rs` to `storage/encounter.rs` (now `storage::Encounter`, re-exported
 from `storage.rs`). This couples the domain type to the storage module and
 contradicts both CLAUDE.md's code-layout map and §2's target (`storage/encounter.rs`
-was meant for *encounter-file I/O*, not the `Encounter` domain model). The domain
+was meant for _encounter-file I/O_, not the `Encounter` domain model). The domain
 `Encounter` should live under `model/`; keep `storage/` for records/persistence.
 Decide deliberately: either move it back to `model/` or update the plan + CLAUDE.md
 to reflect the new home. Right now the two disagree.
 
 **Recommended next commits (small, test-green, in order):**
+
 1. Fix the quit/save regression: `update` → `Effect`, `break` on `Effect::Quit`,
    set `dirty` on mutating actions, add `save_if_dirty()`, call it after the loop
-   (and optionally once per iteration). Restores quitting *and* persistence.
+   (and optionally once per iteration). Restores quitting _and_ persistence.
 2. Extract `event.rs` with a single `map_event(&app, &event) -> Option<Action>`.
 3. Resolve the `Encounter` location question (see above).
 4. `draw_ui(&App)` + derive `TableState`; delete `main_table_state` (Steps 4/6).
@@ -204,19 +206,21 @@ to reflect the new home. Right now the two disagree.
 6. Backfill `update` unit tests (Step 7).
 
 ### Phase 1 — Make the core loop actually work (highest user value)
+
 - Implement `submit_editor()`: parse fields, choose Player vs Monster (add a
   type toggle + the missing `amount_input` to spawn N copies like "Goblin 1..3"),
   validate numeric input, push creature(s).
 - Add edit-existing and delete (`e` / `d`), and a confirm for delete.
 - **Real initiative:** an action to roll initiative for all (or per-creature),
   sort the encounter descending by initiative with a dex-mod / manual tie-break,
-  and make "next turn" advance through the *sorted* order with round counting.
+  and make "next turn" advance through the _sorted_ order with round counting.
 - Wire damage/heal/status keys to the existing model methods (small modal or
   inline prompt).
 - **Exit criteria:** you can run a full combat from an empty screen without
   touching a JSON file.
 
 ### Phase 2 — Encounter files & party persistence
+
 - Command/menu to **save** current encounter (reuse `store_encounter`) and
   **load** one via a file picker over `$XDG_DATA_HOME/intuitive/encounters`.
 - **Party** = a persisted roster of `Player` creatures (`party.rs`, own record +
@@ -227,6 +231,7 @@ to reflect the new home. Right now the two disagree.
   and drop the standing party into it in a couple of keystrokes.
 
 ### Phase 3 — Dice roller surface
+
 - A roller modal (`r`) that takes a `dice-parser` expression string, shows the
   total and the per-die breakdown, and keeps a small scrollback log.
 - Surface initiative rolls and (optionally) attack/damage rolls through the same
@@ -235,6 +240,7 @@ to reflect the new home. Right now the two disagree.
   work from the UI with visible breakdowns.
 
 ### Phase 4 — 5e.tools statblock database (largest subsystem)
+
 This is the one that needs its own design decisions — flag them explicitly:
 
 - **Data sourcing & licensing.** 5e.tools bestiary data is community-maintained
@@ -260,6 +266,7 @@ This is the one that needs its own design decisions — flag them explicitly:
   encounter, and open its 5e.tools page in the browser.
 
 ### Cross-cutting, do continuously
+
 - Keep the model's unit-test discipline; add tests for initiative sorting,
   editor parsing, and statblock import (golden JSON fixtures).
 - A `--help`/keybind overlay as the keymap grows.
@@ -277,13 +284,13 @@ is what makes Phases 1–4 additive instead of another `match` arm in `main.rs`.
 ### The core mental shift: library vs. app
 
 A library exposes an **API surface** and hands control to a caller. In an app,
-*you are the caller*, and the hard part is managing **mutable state over time** as
+_you are the caller_, and the hard part is managing **mutable state over time** as
 events stream in. Phase 0 imposes one disciplined shape on that: **The Elm
 Architecture (TEA)** — a one-directional loop.
 
-```
-          ┌─────────────────────────────────────────┐
-          │                                          │
+```txt
+          ┌───────────────────────────────────────┐
+          │                                       │
     event.read() ──▶ map to Action ──▶ App::update(Action) ──▶ mutate state
           ▲                                                          │
           │                                                          ▼
@@ -294,7 +301,7 @@ Three rules make it work:
 
 1. **State lives in exactly one place** (`App`).
 2. **Nothing mutates state except `update`.** Rendering only reads.
-3. **Events are translated into *intent* (an `Action`) before touching state.**
+3. **Events are translated into _intent_ (an `Action`) before touching state.**
    Keys are an input detail; `AdvanceTurn` is the intent.
 
 ### Step 1 — Model intent with an `Action` enum
@@ -332,7 +339,7 @@ over purity here is correct.
 
 ### Step 2 — Translate events → actions (the keymap layer)
 
-This pure, *mode-aware* function replaces every scattered `match key_event.code`
+This pure, _mode-aware_ function replaces every scattered `match key_event.code`
 block. The same key means different things per panel — that mode-dependence is
 why it stays separate from `update`.
 
@@ -366,10 +373,10 @@ pub fn map_event(app: &App, event: &Event) -> Option<Action> {
 
 ### Step 3 — The `update` function and the `Effect` pattern
 
-`update` is the *only* place mutation is allowed. It takes an `Action`, changes
+`update` is the _only_ place mutation is allowed. It takes an `Action`, changes
 state, and returns an **`Effect`** — a description of a side effect the loop must
 perform. This keeps I/O out of state logic: `update` doesn't quit or write files,
-it *asks* the loop to. Start minimal; resist a big effect system on day one.
+it _asks_ the loop to. Start minimal; resist a big effect system on day one.
 
 ```rust
 pub enum Effect { None, Quit }
@@ -413,7 +420,7 @@ app.save_if_dirty()?;
 
 Why an `Effect` enum rather than a `bool`? Today a bool would do. You keep the
 enum because Phase 1+ adds `Effect::OpenBrowser(url)` (the 5e.tools link) and
-similar — things `update` shouldn't *do* but must *request*. Then it's an added
+similar — things `update` shouldn't _do_ but must _request_. Then it's an added
 variant, not a signature change across the codebase. That is the whole
 "make later features additive" goal.
 
@@ -442,7 +449,7 @@ enforces the discipline, the same guarantee `&self` methods gave in the library.
 ### Step 5 — Persistence: dirty flag, calibrated
 
 The plan's "per-keystroke save is a smell" is right in principle, but calibrate to
-scale — knowing *when not to optimize* is an app skill. Add `dirty: bool` to `App`
+scale — knowing _when not to optimize_ is an app skill. Add `dirty: bool` to `App`
 (`#[serde(skip)]`), set it in `update` on mutating actions, and:
 
 ```rust
@@ -457,10 +464,10 @@ impl App {
 }
 ```
 
-Two tiers for *when* to call it:
+Two tiers for _when_ to call it:
 
 - **Simplest, and fine now:** call `save_if_dirty()` once per loop iteration
-  (after `update`) *and* on quit. The state file is a few KB; a write is
+  (after `update`) _and_ on quit. The state file is a few KB; a write is
   sub-millisecond. The real smell was coupling saves to navigation handlers —
   writing "when something changed" from one place fixes that. Don't build more.
 - **Batching (not needed until the statblock DB):** switch to
@@ -510,7 +517,7 @@ suite is what lets you refactor fearlessly through Phases 1–4.
 
 Do **not** big-bang this. Sequence so each commit compiles and all tests pass:
 
-1. Add `action.rs` + `event.rs` + `update`, but have `update` call the *existing*
+1. Add `action.rs` + `event.rs` + `update`, but have `update` call the _existing_
    methods. Route `main.rs` through it. Behavior is byte-for-byte identical — only
    the plumbing changed. Commit.
 2. Introduce the `dirty` flag; remove inline `store_state` calls from old
