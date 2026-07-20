@@ -63,8 +63,7 @@ impl Encounter {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::Creature;
-    use crate::storage::Encounter;
+    use crate::model::{Creature, Encounter};
 
     #[test]
     fn cursor_wraps_in_both_directions() {

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, BorderType, Padding, Row, StatefulWidget, Table, TableState},
 };
 
-use crate::storage::Encounter;
+use crate::model::Encounter;
 
 /// The initiative-order table.
 ///

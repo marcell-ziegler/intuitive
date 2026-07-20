@@ -1,6 +1,10 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{action::Action, editor::EditorState, model::Creature, storage::Encounter};
+use crate::{
+    action::Action,
+    editor::EditorState,
+    model::{Creature, Encounter},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Panel {

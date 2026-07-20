@@ -6,9 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::app::App;
-
-mod encounter;
-pub(crate) use encounter::Encounter;
+use crate::model::Encounter;
 
 const ENCOUNTER_RECORD_VERSION: u16 = 1;
 
