@@ -2,15 +2,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Creature;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Encounter {
     pub name: String,
     pub creatures: Vec<Creature>,
     pub initiative_index: usize,
     pub cursor_index: usize,
 }
-
 
 impl Encounter {
     pub fn add_creature(&mut self, creature: Creature) {

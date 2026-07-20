@@ -25,6 +25,8 @@ pub struct App {
     pub current_encounter: Encounter,
     pub current_panel: Panel,
     pub editor_state: EditorState,
+    /// Set on any mutation that should eventually be persisted but doesn't need an immediate save (e.g. cursor movement).
+    pub state_dirty: bool,
 }
 
 impl App {
@@ -113,15 +115,18 @@ impl App {
         match action {
             Action::SelectNextRow => {
                 self.select_next_row();
-                Effect::UpdateState
+                self.state_dirty = true;
+                Effect::None
             }
             Action::SelectPreviousRow => {
                 self.select_previous_row();
-                Effect::UpdateState
+                self.state_dirty = true;
+                Effect::None
             }
             Action::AdvanceTurn => {
                 self.increment_initiative_order();
-                Effect::UpdateState
+                self.state_dirty = true;
+                Effect::None
             }
             Action::SwitchPanel => {
                 self.swap_panel();
@@ -200,6 +205,7 @@ impl From<SerializableApp> for App {
             current_encounter: value.current_encounter,
             current_panel: value.current_panel,
             editor_state: EditorState::default(),
+            state_dirty: false,
         };
         app.sync_table_state();
         app
@@ -231,6 +237,7 @@ impl Default for App {
             current_encounter: Encounter::default(),
             current_panel: Panel::InitiativeTable,
             editor_state: EditorState::default(),
+            state_dirty: false,
         };
         app.sync_table_state();
         app

@@ -82,7 +82,11 @@ impl Default for EditorState {
                 min: 0.0,
                 max: 30.0,
             }),
-            amount: EditorInput::new(FieldKind::Uint { min: 1, max: 99 }),
+            amount: EditorInput {
+                input: Input::default().with_value("1".into()),
+                kind: FieldKind::Uint { min: 1, max: 99 },
+                valid: true,
+            },
             active_input: EditorField::default(),
         }
     }
@@ -149,6 +153,11 @@ impl EditorState {
         for field in self.fields_mut() {
             field.input.reset();
             field.valid = true;
+        }
+        self.amount = EditorInput {
+            input: self.amount.input.clone().with_value("1".into()),
+            kind: self.amount.kind,
+            valid: self.amount.valid,
         }
     }
 
