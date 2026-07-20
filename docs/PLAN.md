@@ -140,13 +140,15 @@ None of this is a rewrite; it's a reshaping that can land incrementally
 - Derive `TableState` from `Encounter` instead of storing it.
 - **Exit criteria:** identical behavior, `main.rs` under ~40 lines, tests green.
 
-#### Phase 0 — progress log (updated 2026-07-20 — second pass, branch `event-loop-refactor`)
+#### Phase 0 — progress log (updated 2026-07-20 — third pass, branch `event-loop-refactor`)
 
-**Status: ~95% done — Phase 0 is functionally complete; one explicit deliverable
-(the `state.json` version wrapper) remains.** Since the previous same-day entry,
-five more commits landed (`43d76d5` through `f86f5f7`) that closed every open item
-except the `AppStateRecord` wrapper. 41 tests green (up from 19). Mapped against
-the Step 1–7 guide in §4:
+**Status: done.** The `AppStateRecord` version wrapper — the one item left after
+the second pass — is landed. `state.json` now round-trips through a
+`schema_version`-checked record exactly like `EncounterRecord`, with tests for
+accept/reject-version, missing-file, and store→load round-trip
+(`storage::state_tests`). 45 tests green (up from 19 at the start of today).
+Every bullet in §3's Phase 0 spec and every step in the §4 guide is closed. Full
+history from today's three passes, mapped against the Step 1–7 guide:
 
 - ✅ **`action.rs` + `event.rs` + `App::update(Action) -> Effect`** — the TEA loop
   is fully in place. `map_event(&app, &event)` is mode-aware (Step 2), `update` is
@@ -178,36 +180,48 @@ the Step 1–7 guide in §4:
   One test per `Action` variant asserting the returned `Effect` and resulting
   state; a `map_event` suite locking the mode-aware keymap (incl. per-panel
   divergence and non-key events). 41 tests total.
-- ❌ **`AppStateRecord` version wrapper — the one remaining Phase 0 task.**
-  `store_state`/`load_state` (`storage.rs:137,150`) still serialize `App` raw with
-  no `schema_version`, unlike `EncounterRecord`. This is an explicit Phase 0 bullet
-  (§3, "Version-wrap `state.json`") and the last thing standing between here and
-  "Phase 0 done." ~10 lines: wrap in `AppStateRecord { schema_version, state }`,
-  version-check on load like `load_encounter` does.
+- ✅ **`AppStateRecord` version wrapper** (final pass, `storage.rs`). Mirrors
+  `EncounterRecord`: a `schema_version`-checked record wraps `App`, with
+  `store_state_to`/`load_state_from` split out from the public XDG-path
+  functions so the version-check logic is unit-testable against temp files
+  instead of the real `$XDG_STATE_HOME` (same pattern `load_encounter` already
+  used). A malformed/future-schema `state.json` now fails loudly on load instead
+  of silently deserializing into whatever `App`'s `Deserialize` impl tolerates.
 
-**Resolved since last pass (previously flagged, now closed):**
+**Resolved this round-trip (previously flagged, now closed):**
 
-- **`submit_editor()` works** and always did as of last pass — validates, spawns
-  single or numbered-copy monsters. Still Monster-only (no Player/Monster toggle);
-  that's a Phase 1 item, not Phase 0.
+- **`submit_editor()` works** — validates, spawns single or numbered-copy
+  monsters. Still Monster-only (no Player/Monster toggle); that's a Phase 1 item,
+  not Phase 0.
 - **`Encounter` moved to `model/encounter.rs`** (`75836a5`) — the storage-vs-model
   location question is settled in favor of the domain layer, matching CLAUDE.md's
   original map and §2's target. `crossterm`/`ratatui` types stay out of it.
+- **`draw_ui(frame, &mut app)` → `draw_ui(frame, &app)` in `main.rs`** — the last
+  place still passing a mutable reference into the read-only render path (it
+  compiled via auto-reborrow, but the intent was stale). Clippy's
+  `unnecessary_mut_passed` caught it.
 
-**Exit-criteria check (§3):** identical behavior ✅; tests green ✅ (41); `main.rs`
+**Exit-criteria check (§3):** identical behavior ✅; tests green ✅ (45); `main.rs`
 is ~56 lines, over the "~40" proxy — but the excess is the autosave-timer
 calibration from Step 5, not loop bloat; the event-dispatch core is thin. Call the
-line target met in spirit.
+line target met in spirit. **Phase 0 is closed.**
 
-**Remaining before Phase 0 is fully closed:**
+**Deliberate deviations from the §4 guide, ratified rather than reverted:**
 
-1. `AppStateRecord` version wrapper for `state.json` (the one true gap above).
+- Persistence is `state_dirty: bool` + a 3s-debounced autosave via
+  `crossterm::event::poll(timeout)`, not the guide's simpler "set `dirty`, save
+  once per loop iteration + on quit." This was a considered upgrade (Step 5
+  explicitly names the poll-based tick as the next tier up), not scope creep.
+- `Encounter` lives in `model/encounter.rs`, matching the guide's own target
+  layout in §2 — the earlier `storage/encounter.rs` placement was the deviation,
+  now corrected.
 
-**Then optional cleanup (can defer into Phase 1):**
+**Deferred, not blocking Phase 0 (carry into Phase 1):**
 
-- Either wire `Action::OpenEditorAtIndex` to a key (`e` for edit-existing, per
-  Phase 1) or drop it — it's constructed only in tests, so clippy still flags the
-  variant as unused in the main build.
+- `Action::OpenEditorAtIndex` is constructed only in tests — wire it to a key
+  (`e`, for edit-existing) when Phase 1's edit-existing lands, or drop it.
+- The editor never chooses Player vs. Monster (`to_creature()` always builds a
+  `Monster`) — tracked under Phase 1 below.
 
 ### Phase 1 — Make the core loop actually work (highest user value)
 

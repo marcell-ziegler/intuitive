@@ -59,19 +59,21 @@ docs/PLAN.md            Roadmap + architecture + Phase 0 guide + progress log
 
 ## Architecture (current vs. intended)
 
-- **Current:** the Elm-style Model → Update(Action) → View loop is mostly landed.
-  `event.rs` maps `crossterm` events to `Action`s (mode-aware), `main.rs` routes
-  every action through `App::update(Action) -> Effect`, and `Effect::Quit` /
-  `Effect::UpdateState` drive the loop and persistence. State is a single `App`
-  holding `current_encounter`, `current_panel`, and `editor_state`.
-- **Still open (Phase 0 tail):** `draw_ui` still takes `&mut App` and mutates via
-  `sync_table_state()` mid-render instead of deriving `TableState` read-only;
-  `main_table_state` is still hand-synced redundant selection state; `state.json`
-  has no `AppStateRecord` version wrapper yet; no unit tests call `App::update`
-  directly. See `docs/PLAN.md` §4 and the Phase 0 progress log for the exact
-  remaining steps and a couple of deliberate deviations from the original guide
-  worth ratifying (persistence via `Effect::UpdateState` per-action rather than a
-  `dirty` flag; `Encounter` living in `storage/encounter.rs` rather than `model/`).
+- **Current: Phase 0 is done.** An Elm-style Model → Update(Action) → View loop.
+  `event.rs` maps `crossterm` events to `Action`s (mode-aware per `Panel`),
+  `main.rs` routes every action through `App::update(Action) -> Effect`, and
+  `Effect::Quit`/`Effect::UpdateState` drive the loop. `draw_ui(&App)` is
+  read-only — `TableState` is derived fresh each frame from
+  `current_encounter.initiative_index` rather than stored on `App`. Persistence
+  uses a `state_dirty` flag + a 3s-debounced autosave (`main.rs`'s poll loop),
+  with `Effect::UpdateState` forcing an immediate write for actions like
+  `SubmitEditor`. `state.json` and encounter files both go through versioned
+  records (`AppStateRecord`/`EncounterRecord` in `storage.rs`). State is a single
+  `App` holding `current_encounter`, `current_panel`, and `editor_state`.
+- See `docs/PLAN.md` §4 and the Phase 0 progress log for the full history,
+  including a couple of deliberate deviations from the original guide (dirty-flag
+  persistence instead of a bool set only on `Quit`; `Encounter` living in
+  `model/encounter.rs`, which the guide's own target layout agrees with).
 
 The `model/` layer is the strongest, best-tested part of the codebase; prefer
 extending it over reworking it. Keep `crossterm`/`ratatui` types out of `model/`.
@@ -82,10 +84,9 @@ extending it over reworking it. Keep `crossterm`/`ratatui` types out of `model/`
   add tests for new behavior (especially `App::update` logic once it exists — it's
   pure and unit-testable without a terminal).
 - Run `cargo fmt` before committing.
-- Persisted structs are versioned via a `schema_version` record (see
-  `EncounterRecord` in `storage.rs`). When you change a persisted model, bump/handle
-  the version. `state.json` does **not** yet have this wrapper — adding
-  `AppStateRecord` is a Phase 0 task.
+- Persisted structs are versioned via a `schema_version` record (`EncounterRecord`
+  and `AppStateRecord` in `storage.rs`). When you change a persisted model,
+  bump/handle the version.
 - Match the surrounding style: doc comments (`///`) on public model methods,
   descriptive commit messages.
 
