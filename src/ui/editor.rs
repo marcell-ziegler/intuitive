@@ -1,4 +1,4 @@
-use crate::app::{EditorField, EditorInput, EditorState};
+use crate::editor::{EditorField, EditorInput, EditorState};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},

@@ -2,6 +2,7 @@ use crate::{app::Effect, event::map_event, ui::draw_ui};
 
 mod action;
 mod app;
+mod editor;
 mod event;
 mod model;
 mod storage;

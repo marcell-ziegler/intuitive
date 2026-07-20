@@ -8,8 +8,8 @@ use crate::{
 pub fn map_event(app: &App, e: &Event) -> Option<Action> {
     if let Some(key_event) = e.as_key_event() {
         match app.current_panel {
-            Panel::Editor => handle_editor_keys(&key_event, &e),
-            Panel::InitiativeTable | Panel::Sidebar => handle_main_view_keys(&key_event, &e),
+            Panel::Editor => handle_editor_keys(&key_event, e),
+            Panel::InitiativeTable | Panel::Sidebar => handle_main_view_keys(&key_event, e),
         }
     } else {
         None

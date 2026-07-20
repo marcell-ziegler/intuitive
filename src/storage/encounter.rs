@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::Creature;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Encounter {
     pub name: String,
     pub creatures: Vec<Creature>,
@@ -10,16 +11,6 @@ pub struct Encounter {
     pub cursor_index: usize,
 }
 
-impl Default for Encounter {
-    fn default() -> Self {
-        Encounter {
-            name: String::new(),
-            creatures: vec![],
-            initiative_index: 0,
-            cursor_index: 0,
-        }
-    }
-}
 
 impl Encounter {
     pub fn add_creature(&mut self, creature: Creature) {
