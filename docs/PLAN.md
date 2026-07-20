@@ -140,94 +140,74 @@ None of this is a rewrite; it's a reshaping that can land incrementally
 - Derive `TableState` from `Encounter` instead of storing it.
 - **Exit criteria:** identical behavior, `main.rs` under ~40 lines, tests green.
 
-#### Phase 0 — progress log (updated 2026-07-20, branch `event-loop-refactor`)
+#### Phase 0 — progress log (updated 2026-07-20 — second pass, branch `event-loop-refactor`)
 
-**Status: ~70% done.** Five commits landed since the last check-in (`0cb83a7`
-through `2979593`), fixing both regressions flagged previously and going further
-than Phase 0 into the `submit_editor()` half of Phase 1. 19 tests green (up from
-14). Mapped against the Step 1–7 guide in §4:
+**Status: ~95% done — Phase 0 is functionally complete; one explicit deliverable
+(the `state.json` version wrapper) remains.** Since the previous same-day entry,
+five more commits landed (`43d76d5` through `f86f5f7`) that closed every open item
+except the `AppStateRecord` wrapper. 41 tests green (up from 19). Mapped against
+the Step 1–7 guide in §4:
 
-- ✅ **`action.rs` exists** with the full `Action` enum, incl. `EditorInput(Event)`.
-  Some naming drifted from the guide (`SelectNextRow`/`SelectPreviousRow` instead of
-  `SelectNext`/`SelectPrevious`, `OpenEditorWithNewCreature` instead of `OpenEditor`)
-  and one Phase-1-flavored addition: `OpenEditorAtIndex(u16)`, a hook for
-  edit-existing that no key currently produces (clippy flags it as unconstructed —
-  harmless, but wire it up or remove it before it rots).
-- ✅ **`event.rs` now exists** (`0cb83a7 "Break out events"`) with a single
-  mode-aware `map_event(&app, &event) -> Option<Action>`, matching Step 2 exactly.
-  The old `main.rs`-resident free functions are gone.
-- ✅ **`App::update(Action) -> Effect`** is the single mutation entry point and
-  now genuinely returns `Effect` (`2979593 "Refactor dirty flag to
-  Effect::UpdateState"`). `main.rs` matches on it: `Effect::Quit` breaks the loop,
-  `Effect::UpdateState` persists. **Both regressions from the last check-in are
-  fixed** — `q` quits again, and state is written back.
-- ⚠️ **Persistence took a different shape than Step 5 describes, with a caveat.**
-  Instead of a `dirty: bool` field + `save_if_dirty()`, `update` returns
-  `Effect::UpdateState` directly from each mutating arm, and `main.rs` calls
-  `storage::store_state(&app)` synchronously, inline, the moment it sees that
-  effect (`main.rs:27-29`). This is a reasonable variant of the pattern (arguably
-  cleaner — no separate flag to forget to set) but it reintroduces the exact smell
-  §1 called out: **`SelectNextRow`/`SelectPreviousRow`/`AdvanceTurn` all return
-  `Effect::UpdateState`**, so every single `j`/`k`/`space` keypress now triggers a
-  synchronous disk write again, same as the pre-refactor per-keystroke
-  `store_state` calls. Only `Action::SwitchPanel` and the editor-navigation actions
-  are silent. Worth a deliberate call: either accept it (the state file is tiny,
-  writes are sub-ms, per PLAN.md's own "don't over-optimize" note in Step 5), or
-  split `Effect::UpdateState` into "persist now" vs. "mark dirty, persist on
-  quit/interval" so cursor movement doesn't hit disk. Also note `main.rs:35` still
-  unconditionally calls `store_state(&app)` once more after the loop — harmless
-  (state's already flushed by the last `UpdateState`) but redundant now that
-  `Effect::Quit` doesn't itself trigger a save.
-- ❌ **`draw_ui` still takes `&mut App`** (`ui.rs:19`) and still calls
-  `app.sync_table_state()` mid-render (`ui.rs:44`). Step 4 not started.
-- ❌ **Redundant selection state intact.** `main_table_state` still lives on `App`
-  and is hand-synced via `sync_table_state()`. Step 6 not started.
-- ❌ **No `AppStateRecord` version wrapper.** `state.json` is still serialized raw
-  via `SerializableApp` with no `schema_version` field — unlike `EncounterRecord`,
-  which does have one. Step 6 (persistence half) not started.
-- ❌ **No `update`/`Action` unit tests.** The 19 tests are all either pre-existing
-  model tests, the one `app_serde_round_trips_encounter_state` test, or new
-  `EditorState` validation tests — none call `App::update(Action)` directly to
-  assert on the returned `Effect` or resulting state. Step 7 not started.
+- ✅ **`action.rs` + `event.rs` + `App::update(Action) -> Effect`** — the TEA loop
+  is fully in place. `map_event(&app, &event)` is mode-aware (Step 2), `update` is
+  the single mutation entry point returning `Effect` (Step 3), and `main.rs` is a
+  thin loop matching on the effect. `Action` now derives `Debug, PartialEq`
+  (`f86f5f7`) so keymap results are assertable. Minor naming drift from the guide
+  persists (`SelectNextRow`, `OpenEditorWithNewCreature`) — cosmetic, no action.
+- ✅ **Persistence resolved cleanly (Step 5), the earlier smell fixed.** The
+  per-keystroke-write regression flagged last pass is gone. `App` now has a
+  `state_dirty: bool` (`43d76d5`); cursor/turn actions (`SelectNextRow`,
+  `SelectPreviousRow`, `AdvanceTurn`) set it and return `Effect::None` — **no disk
+  write per keypress**. `Effect::UpdateState` is reserved for mutations that want
+  an immediate flush (`SubmitEditor`). `main.rs` polls with a 3-second timeout
+  (`AUTOSAVE_INTERVAL`) and saves when either `state_dirty` has aged past the
+  interval or `Effect::UpdateState` fires, plus an unconditional save-on-quit after
+  the loop. This is exactly the two-tier "simplest, and fine now" path from Step 5,
+  with the optional poll-based tick added.
+- ✅ **`draw_ui` takes `&App`; `TableState` is derived at render time** (`a6ecfdd`).
+  `main_table_state` is deleted from `App` and `sync_table_state()` is gone;
+  `ui.rs` builds a fresh `TableState` each frame from
+  `current_encounter.initiative_index`. The compiler now enforces "views don't
+  mutate." Steps 4 + 6 done.
+- ✅ **Redundant selection state collapsed** (`a6ecfdd`/`2c8c895`). `Encounter` is
+  the single source of truth; the render-time `TableState` is a pure derivative.
+  Load-time safety added via `Encounter::clamp_indices()`, called from
+  `From<SerializableApp>`, so a stale/hand-edited `state.json` can't select past
+  the end of the list (covered by tests).
+- ✅ **`App::update` + `event::map_event` unit tests exist** (`f86f5f7`, Step 7).
+  One test per `Action` variant asserting the returned `Effect` and resulting
+  state; a `map_event` suite locking the mode-aware keymap (incl. per-panel
+  divergence and non-key events). 41 tests total.
+- ❌ **`AppStateRecord` version wrapper — the one remaining Phase 0 task.**
+  `store_state`/`load_state` (`storage.rs:137,150`) still serialize `App` raw with
+  no `schema_version`, unlike `EncounterRecord`. This is an explicit Phase 0 bullet
+  (§3, "Version-wrap `state.json`") and the last thing standing between here and
+  "Phase 0 done." ~10 lines: wrap in `AppStateRecord { schema_version, state }`,
+  version-check on load like `load_encounter` does.
 
-**🎉 Bonus: `submit_editor()` is no longer `todo!()`.** This was Phase 1's #1
-blocker per §1 item 1 and CLAUDE.md's top "known rough edge" — both are now stale.
-`App::submit_editor()` (`app.rs:71`) validates every field (`EditorState::
-validate_inputs`, `editor.rs:186`), rejects out-of-range/empty/cross-field-invalid
-input without closing the editor, and on success builds and adds one or more
-`Creature`s (the `Amount` field now has a real backing `Input` and spawns
-numbered copies, e.g. "Goblin 1".."Goblin 3" — closing §1 item 3's first half).
-The remaining gap: the editor still never chooses Player vs. Monster —
-`to_creature()` (`editor.rs:238`) always builds a `Monster`. That specific piece
-of item 3 is still open, and CLAUDE.md's "known rough edges" section needs
-updating to reflect all of this.
+**Resolved since last pass (previously flagged, now closed):**
 
-**⚠️ Structural deviation still unresolved:** `Encounter` still lives in
-`storage/encounter.rs` (`storage::Encounter`, re-exported from `storage.rs`),
-not `model/`. CLAUDE.md's code-layout map still says `model/encounter.rs` and
-still describes `main.rs` as unrefactored — both are now inaccurate and should be
-updated regardless of which way the `Encounter` location question is resolved.
+- **`submit_editor()` works** and always did as of last pass — validates, spawns
+  single or numbered-copy monsters. Still Monster-only (no Player/Monster toggle);
+  that's a Phase 1 item, not Phase 0.
+- **`Encounter` moved to `model/encounter.rs`** (`75836a5`) — the storage-vs-model
+  location question is settled in favor of the domain layer, matching CLAUDE.md's
+  original map and §2's target. `crossterm`/`ratatui` types stay out of it.
 
-**Also worth noting (not a regression, ahead of plan):** `ui.rs` was broken out
-into `ui/table.rs`, `ui/sidebar.rs`, `ui/editor.rs` (`b7800f1 "ui breakout"`), and
-the editor's model (`EditorState`/`EditorInput`/validation) now lives in its own
-top-level `editor.rs` separate from both `app.rs` and `ui/editor.rs`
-(`a03a4cc`/`101d21f`). This anticipates §2's target `ui/` layout and is a clean
-split (state vs. render) — no action needed, just noting it's ahead of where the
-last log described it.
+**Exit-criteria check (§3):** identical behavior ✅; tests green ✅ (41); `main.rs`
+is ~56 lines, over the "~40" proxy — but the excess is the autosave-timer
+calibration from Step 5, not loop bloat; the event-dispatch core is thin. Call the
+line target met in spirit.
 
-**Recommended next commits (small, test-green, in order):**
+**Remaining before Phase 0 is fully closed:**
 
-1. Decide the `Effect::UpdateState`-on-every-cursor-move question above; if
-   splitting persist-now vs. mark-dirty, land that.
-2. `draw_ui(&App)` + derive `TableState` in the renderer; delete `main_table_state`
-   (Steps 4/6).
-3. `AppStateRecord` version wrapper for `state.json`.
-4. Resolve the `Encounter` location question and update CLAUDE.md's code-layout
-   map + stale `submit_editor()`/`main.rs` references either way.
-5. Backfill `App::update` unit tests, one per `Action` (Step 7).
-6. Either wire `Action::OpenEditorAtIndex` to a key (`e` for edit-existing, per
-   Phase 1) or drop it until that lands — it's currently dead code per clippy.
+1. `AppStateRecord` version wrapper for `state.json` (the one true gap above).
+
+**Then optional cleanup (can defer into Phase 1):**
+
+- Either wire `Action::OpenEditorAtIndex` to a key (`e` for edit-existing, per
+  Phase 1) or drop it — it's constructed only in tests, so clippy still flags the
+  variant as unused in the main build.
 
 ### Phase 1 — Make the core loop actually work (highest user value)
 
