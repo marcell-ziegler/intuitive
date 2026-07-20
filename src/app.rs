@@ -218,8 +218,27 @@ impl Default for App {
 
 #[cfg(test)]
 mod tests {
-    use super::{App, EditorState, Panel};
+    use super::{App, EditorState, Effect, Panel};
+    use crate::action::Action;
+    use crate::editor::EditorField;
     use crate::model::Creature;
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+    /// An `App` holding `n` throwaway creatures, cursor/initiative at 0.
+    fn app_with_creatures(n: usize) -> App {
+        let mut app = App::default();
+        for i in 0..n {
+            app.current_encounter.add_creature(Creature::new_player(
+                &format!("C{i}"),
+                10,
+                10,
+                None,
+                None,
+                None,
+            ));
+        }
+        app
+    }
 
     /// Fill every editor field with a valid value.
     fn valid_editor() -> EditorState {
@@ -305,5 +324,158 @@ mod tests {
         assert_eq!(restored.current_encounter.initiative_index, 1);
         assert_eq!(restored.current_encounter.creatures.len(), 2);
         assert_eq!(restored.current_panel, Panel::Editor);
+    }
+
+    // --- `App::update` — one test per `Action`, asserting the returned `Effect`
+    //     and the resulting state (Phase 0, Step 7). ---
+
+    #[test]
+    fn update_select_next_row_advances_cursor_and_marks_dirty() {
+        let mut app = app_with_creatures(2);
+        assert_eq!(app.update(Action::SelectNextRow), Effect::None);
+        assert_eq!(app.current_encounter.cursor_index, 1);
+        assert!(app.state_dirty);
+    }
+
+    #[test]
+    fn update_select_previous_row_wraps_cursor_and_marks_dirty() {
+        let mut app = app_with_creatures(2);
+        assert_eq!(app.update(Action::SelectPreviousRow), Effect::None);
+        assert_eq!(app.current_encounter.cursor_index, 1); // 0 wraps to last row
+        assert!(app.state_dirty);
+    }
+
+    #[test]
+    fn update_advance_turn_moves_initiative_and_marks_dirty() {
+        let mut app = app_with_creatures(2);
+        assert_eq!(app.update(Action::AdvanceTurn), Effect::None);
+        assert_eq!(app.current_encounter.initiative_index, 1);
+        assert!(app.state_dirty);
+    }
+
+    #[test]
+    fn update_switch_panel_toggles_and_stays_clean() {
+        let mut app = App::default();
+        assert_eq!(app.current_panel, Panel::InitiativeTable);
+        assert_eq!(app.update(Action::SwitchPanel), Effect::None);
+        assert_eq!(app.current_panel, Panel::Sidebar);
+        app.update(Action::SwitchPanel);
+        assert_eq!(app.current_panel, Panel::InitiativeTable);
+        assert!(!app.state_dirty); // panel is view-only, not persisted
+    }
+
+    #[test]
+    fn update_open_editor_with_new_creature_opens_blank_editor() {
+        let mut app = App::default();
+        app.editor_state.name.input = app
+            .editor_state
+            .name
+            .input
+            .clone()
+            .with_value("stale".into());
+        assert_eq!(app.update(Action::OpenEditorWithNewCreature), Effect::None);
+        assert_eq!(app.current_panel, Panel::Editor);
+        assert_eq!(app.editor_state.name.input.value(), ""); // cleared
+    }
+
+    #[test]
+    fn update_open_editor_at_index_loads_the_creature() {
+        let mut app = App::default();
+        app.current_encounter.add_creature(Creature::new_monster(
+            "Goblin",
+            7,
+            15,
+            Some(7),
+            None,
+            Some(0.25),
+        ));
+        assert_eq!(app.update(Action::OpenEditorAtIndex(0)), Effect::None);
+        assert_eq!(app.current_panel, Panel::Editor);
+        assert_eq!(app.editor_state.name.input.value(), "Goblin");
+        assert_eq!(app.editor_state.ac.input.value(), "15");
+    }
+
+    #[test]
+    fn update_open_editor_at_out_of_range_index_opens_without_loading() {
+        let mut app = App::default();
+        assert_eq!(app.update(Action::OpenEditorAtIndex(9)), Effect::None);
+        assert_eq!(app.current_panel, Panel::Editor);
+        assert_eq!(app.editor_state.name.input.value(), "");
+    }
+
+    #[test]
+    fn update_close_editor_returns_to_table_and_clears() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor;
+        app.editor_state.name.input = app
+            .editor_state
+            .name
+            .input
+            .clone()
+            .with_value("half".into());
+        assert_eq!(app.update(Action::CloseEditor), Effect::None);
+        assert_eq!(app.current_panel, Panel::InitiativeTable);
+        assert_eq!(app.editor_state.name.input.value(), "");
+    }
+
+    #[test]
+    fn update_editor_field_navigation_moves_focus() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor;
+        assert_eq!(app.editor_state.active_input, EditorField::Name);
+        assert_eq!(app.update(Action::EditorNextField), Effect::None);
+        assert_eq!(app.editor_state.active_input, EditorField::CurrentHP);
+        assert_eq!(app.update(Action::EditorPrevField), Effect::None);
+        assert_eq!(app.editor_state.active_input, EditorField::Name);
+    }
+
+    #[test]
+    fn update_submit_valid_editor_adds_creature_and_requests_save() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor;
+        app.editor_state = valid_editor();
+        assert_eq!(app.update(Action::SubmitEditor), Effect::UpdateState);
+        assert_eq!(app.current_encounter.creatures.len(), 1);
+        assert_eq!(app.current_encounter.creatures[0].name(), "Goblin");
+        assert_eq!(app.current_panel, Panel::InitiativeTable); // editor closed
+    }
+
+    #[test]
+    fn update_submit_invalid_editor_keeps_editor_open_and_adds_nothing() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor;
+        app.editor_state = valid_editor();
+        app.editor_state.name.input = app.editor_state.name.input.clone().with_value("".into());
+        assert_eq!(app.update(Action::SubmitEditor), Effect::None);
+        assert_eq!(app.current_encounter.creatures.len(), 0);
+        assert_eq!(app.current_panel, Panel::Editor); // stayed open
+    }
+
+    #[test]
+    fn update_submit_with_amount_spawns_numbered_copies() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor;
+        app.editor_state = valid_editor();
+        app.editor_state.amount.input =
+            app.editor_state.amount.input.clone().with_value("3".into());
+        assert_eq!(app.update(Action::SubmitEditor), Effect::UpdateState);
+        assert_eq!(app.current_encounter.creatures.len(), 3);
+        assert_eq!(app.current_encounter.creatures[0].name(), "Goblin 1");
+        assert_eq!(app.current_encounter.creatures[2].name(), "Goblin 3");
+    }
+
+    #[test]
+    fn update_editor_input_is_delegated_to_the_active_field() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor; // active field defaults to Name
+        let ev = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()));
+        assert_eq!(app.update(Action::EditorInput(ev)), Effect::None);
+        assert_eq!(app.editor_state.name.input.value(), "x");
+    }
+
+    #[test]
+    fn update_quit_returns_quit_effect() {
+        let mut app = App::default();
+        assert_eq!(app.update(Action::Quit), Effect::Quit);
     }
 }
