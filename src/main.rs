@@ -24,7 +24,7 @@ fn main() -> color_eyre::Result<()> {
     let mut last_save = Instant::now();
 
     loop {
-        term.draw(|frame| draw_ui(frame, &mut app))?;
+        term.draw(|frame| draw_ui(frame, &app))?;
 
         if crossterm::event::poll(AUTOSAVE_INTERVAL)? {
             let e = crossterm::event::read()?;
