@@ -37,29 +37,41 @@ Notes:
 
 ```
 src/
-  main.rs              Event loop + key handling (to be refactored in Phase 0)
-  app.rs               `App` state, `EditorState`, serde, App<->SerializableApp
-  ui.rs                All ratatui rendering (header, table, sidebar, editor modal)
-  storage.rs           XDG paths, versioned EncounterRecord, save/load state
-  model.rs             Module root re-exporting Creature, Encounter
+  main.rs              Terminal init + event loop (~40 lines, routes through App::update)
+  action.rs            `Action` enum — user intents
+  event.rs             `map_event(&app, &event) -> Option<Action>`, mode-aware keymap
+  app.rs               `App` state, `Effect`, `update()`, serde, App<->SerializableApp
+  editor.rs            `EditorState`/`EditorInput` — editor field state + validation
+  ui.rs                 Layout + dispatch; renders read `&mut App` (Step 4 of Phase 0 pending)
+  ui/
+    table.rs           Initiative table widget
+    sidebar.rs          Sidebar placeholder widget
+    editor.rs           Editor modal widget (reads `EditorState`)
+  storage.rs            XDG paths, versioned EncounterRecord, save/load state
+  storage/encounter.rs   `Encounter` domain type (NOTE: lives here, not model/ — see docs/PLAN.md)
+  model.rs               Module root re-exporting Creature
   model/
-    creature.rs        `Creature` enum (Player/Monster) + CreatureProperties; well-tested
-    encounter.rs       `Encounter` (creatures Vec, cursor_index, initiative_index)
-    stats.rs           `Stats` + ability-modifier math
-    status.rs          `Status` enum (5e conditions)
-docs/PLAN.md           Roadmap + architecture + Phase 0 guide
+    creature.rs         `Creature` enum (Player/Monster) + CreatureProperties; well-tested
+    stats.rs             `Stats` + ability-modifier math
+    status.rs            `Status` enum (5e conditions)
+docs/PLAN.md            Roadmap + architecture + Phase 0 guide + progress log
 ```
 
 ## Architecture (current vs. intended)
 
-- **Current:** event handling lives in `main.rs` as nested `match` blocks; `ui.rs`
-  renders. State is a single `App` holding the `current_encounter`, `current_panel`
-  (`InitiativeTable` / `Sidebar` / `Editor`), and `editor_state`.
-- **Intended (Phase 0):** an Elm-style **Model → Update(Action) → View** loop.
-  Add `action.rs` (an `Action` enum of user *intents*) and `event.rs` (pure
-  key→`Action` mapping), route everything through `App::update(Action) -> Effect`,
-  and make rendering read-only (`draw_ui(&App)`). See `docs/PLAN.md` §4 for the
-  step-by-step migration — follow it in small, test-green commits.
+- **Current:** the Elm-style Model → Update(Action) → View loop is mostly landed.
+  `event.rs` maps `crossterm` events to `Action`s (mode-aware), `main.rs` routes
+  every action through `App::update(Action) -> Effect`, and `Effect::Quit` /
+  `Effect::UpdateState` drive the loop and persistence. State is a single `App`
+  holding `current_encounter`, `current_panel`, and `editor_state`.
+- **Still open (Phase 0 tail):** `draw_ui` still takes `&mut App` and mutates via
+  `sync_table_state()` mid-render instead of deriving `TableState` read-only;
+  `main_table_state` is still hand-synced redundant selection state; `state.json`
+  has no `AppStateRecord` version wrapper yet; no unit tests call `App::update`
+  directly. See `docs/PLAN.md` §4 and the Phase 0 progress log for the exact
+  remaining steps and a couple of deliberate deviations from the original guide
+  worth ratifying (persistence via `Effect::UpdateState` per-action rather than a
+  `dirty` flag; `Encounter` living in `storage/encounter.rs` rather than `model/`).
 
 The `model/` layer is the strongest, best-tested part of the codebase; prefer
 extending it over reworking it. Keep `crossterm`/`ratatui` types out of `model/`.
@@ -79,18 +91,26 @@ extending it over reworking it. Keep `crossterm`/`ratatui` types out of `model/`
 
 ## Known rough edges / gotchas
 
-- `App::submit_editor()` is `todo!()` (`app.rs`) — the creature editor renders and
-  captures input but cannot yet create a creature. This is the top Phase 1 task.
+- `App::submit_editor()` works now (validates, spawns single or numbered-copy
+  creatures via the `Amount` field), but always builds a `Monster` — the editor
+  never lets you choose Player vs Monster. Remaining Phase 1 gap.
 - Initiative order is **insertion order**, not sorted by rolled initiative value;
   `roll_initiative()` exists on `Creature` but nothing in the UI triggers it or
   sorts by it. Real initiative tracking is Phase 1.
 - Selection position is tracked redundantly (`Encounter::cursor_index`,
   `Encounter::initiative_index`, `App::main_table_state`) and hand-synced via
-  `sync_table_state()`. Phase 0 collapses this to a single source of truth.
-- Dead-code warnings exist (`store_encounter`, `centered_rect`) — these are
-  intentionally-unused scaffolding for upcoming phases, not bugs to delete.
-- The editor's `Amount` field is enumerated but has no backing `Input`, and the
-  editor never chooses Player vs Monster — both are Phase 1 gaps.
+  `sync_table_state()`, including mid-render in `ui.rs`. Phase 0 collapses this
+  to a single source of truth — not done yet.
+- `Effect::UpdateState` is returned from `SelectNextRow`/`SelectPreviousRow`/
+  `AdvanceTurn`, so cursor movement writes `state.json` synchronously on every
+  keypress — the same per-keystroke-persistence smell Phase 0 set out to fix.
+  See `docs/PLAN.md`'s Phase 0 progress log before changing this.
+- Dead-code warnings exist (`store_encounter`, `load_encounter`,
+  `EncounterRecord`, `Action::OpenEditorAtIndex`) — these are intentionally-unused
+  scaffolding for upcoming phases (encounter file I/O, edit-existing), not bugs
+  to delete.
+- `state.json` has no version wrapper yet (unlike `EncounterRecord`) — a model
+  change can silently break old saves. Phase 0 task.
 
 ## Dependencies of note
 
