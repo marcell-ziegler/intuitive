@@ -86,53 +86,6 @@ pub fn store_encounter(
     Ok(path)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{EncounterRecord, load_encounter};
-    use crate::storage::Encounter;
-    use std::{
-        fs,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    fn temp_file_path(name: &str) -> std::path::PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir().join(format!("intuitive-{}-{}.json", name, nanos))
-    }
-
-    #[test]
-    fn load_encounter_accepts_current_record_version() {
-        let path = temp_file_path("encounter-v1");
-        let record = EncounterRecord::new(Encounter::default());
-        let json = serde_json::to_string(&record).unwrap();
-        fs::write(&path, json).unwrap();
-
-        let loaded = load_encounter(&path).unwrap();
-        assert_eq!(loaded.creatures.len(), 0);
-
-        fs::remove_file(&path).unwrap();
-    }
-
-    #[test]
-    fn load_encounter_rejects_unknown_record_version() {
-        let path = temp_file_path("encounter-v999");
-        let record = EncounterRecord {
-            schema_version: 999,
-            encounter: Encounter::default(),
-        };
-        let json = serde_json::to_string(&record).unwrap();
-        fs::write(&path, json).unwrap();
-
-        let err = load_encounter(&path).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
-
-        fs::remove_file(&path).unwrap();
-    }
-}
-
 const APP_STATE_RECORD_VERSION: u16 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,6 +148,53 @@ pub fn store_state(state: &App) -> Result<PathBuf, io::Error> {
 
 pub fn load_state() -> Result<Option<App>, io::Error> {
     load_state_from(xdg_state_home().join("intuitive/state.json"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EncounterRecord, load_encounter};
+    use crate::storage::Encounter;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_file_path(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("intuitive-{}-{}.json", name, nanos))
+    }
+
+    #[test]
+    fn load_encounter_accepts_current_record_version() {
+        let path = temp_file_path("encounter-v1");
+        let record = EncounterRecord::new(Encounter::default());
+        let json = serde_json::to_string(&record).unwrap();
+        fs::write(&path, json).unwrap();
+
+        let loaded = load_encounter(&path).unwrap();
+        assert_eq!(loaded.creatures.len(), 0);
+
+        fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn load_encounter_rejects_unknown_record_version() {
+        let path = temp_file_path("encounter-v999");
+        let record = EncounterRecord {
+            schema_version: 999,
+            encounter: Encounter::default(),
+        };
+        let json = serde_json::to_string(&record).unwrap();
+        fs::write(&path, json).unwrap();
+
+        let err = load_encounter(&path).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+
+        fs::remove_file(&path).unwrap();
+    }
 }
 
 #[cfg(test)]

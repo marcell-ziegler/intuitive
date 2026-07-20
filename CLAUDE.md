@@ -12,7 +12,7 @@ loadable encounter files, party persistence between sessions, a searchable
 **Read `docs/PLAN.md` first.** It holds the current-state assessment, the target
 architecture, the phased roadmap, and a detailed Phase 0 refactor guide. This
 file is the quick operational reference; `docs/PLAN.md` is the source of truth for
-*what to build and why*.
+_what to build and why_.
 
 ## Commands
 
@@ -25,6 +25,7 @@ cargo fmt            # format before committing
 ```
 
 Notes:
+
 - Rust **edition 2024**.
 - `main()` calls `debug_assert!(dotenvy::dotenv().is_ok())`, so in debug builds a
   missing `.env` will panic on startup. Provide a `.env` (may be empty) or run a
@@ -35,7 +36,7 @@ Notes:
 
 ## Code layout
 
-```
+```txt
 src/
   main.rs              Terminal init + event loop (~40 lines, routes through App::update)
   action.rs            `Action` enum — user intents
