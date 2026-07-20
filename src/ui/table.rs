@@ -104,7 +104,7 @@ fn format_level_or_cr(value: f64) -> String {
 
 /// The keybind hint rendered along the bottom border of the table.
 fn keybind_hint() -> Line<'static> {
-    (Span::from("─")
+    Span::from("─")
         + Span::from("k/j").bold().white()
         + Span::from("─")
         + Span::from("Up/Down").white()
@@ -116,5 +116,5 @@ fn keybind_hint() -> Line<'static> {
         + Span::from("n").bold().white()
         + Span::from("─")
         + Span::from("Add Creature").white()
-        + Span::from("──"))
+        + Span::from("──")
 }

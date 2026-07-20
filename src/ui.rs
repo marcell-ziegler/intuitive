@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
     text::Span,
-    widgets::{Block, BorderType, Paragraph},
+    widgets::{Block, BorderType, Paragraph, TableState},
 };
 
 use crate::app::{App, Panel};
@@ -16,7 +16,7 @@ use editor::Editor;
 use sidebar::Sidebar;
 use table::InitiativeTable;
 
-pub fn draw_ui(frame: &mut Frame, app: &mut App) {
+pub fn draw_ui(frame: &mut Frame, app: &App) {
     // Main UI chunks: header and main space.
     let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(frame.area());
 
@@ -41,12 +41,17 @@ pub fn draw_ui(frame: &mut Frame, app: &mut App) {
         content_chunks[1],
     );
 
-    app.sync_table_state();
     let focused = app.current_panel == Panel::InitiativeTable;
+
+    let mut table_state = TableState::default();
+    if !app.current_encounter.creatures.is_empty() {
+        table_state.select(Some(app.current_encounter.initiative_index))
+    }
+
     frame.render_stateful_widget(
         InitiativeTable::new(&app.current_encounter, focused),
         content_chunks[0],
-        &mut app.main_table_state,
+        &mut table_state,
     );
 
     if app.current_panel == Panel::Editor {

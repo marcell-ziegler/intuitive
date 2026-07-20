@@ -47,6 +47,18 @@ impl Encounter {
             self.initiative_index = (self.initiative_index + 1) % len;
         }
     }
+
+    /// Pull `cursor_index`/`initiative_index` back in bounds (0 if empty,
+    /// otherwise at most the last row). The `select_*` methods above always
+    /// keep both valid on their own via wrapping arithmetic, but a persisted
+    /// `state.json` is untrusted input — a stale save from before rows were
+    /// removed, or a hand-edited file, can carry an index the current
+    /// `creatures` list no longer has. Call this once after loading.
+    pub fn clamp_indices(&mut self) {
+        let max = self.creatures.len().saturating_sub(1);
+        self.cursor_index = self.cursor_index.min(max);
+        self.initiative_index = self.initiative_index.min(max);
+    }
 }
 
 #[cfg(test)]
@@ -67,5 +79,30 @@ mod tests {
         assert_eq!(encounter.cursor_index, 0);
         encounter.select_previous_cursor();
         assert_eq!(encounter.cursor_index, 1);
+    }
+
+    #[test]
+    fn clamp_indices_pulls_stale_indices_back_in_bounds() {
+        let mut encounter = Encounter::default();
+        encounter.add_creature(Creature::new_player("Alice", 10, 10, None, None, None));
+        encounter.cursor_index = 5;
+        encounter.initiative_index = 5;
+
+        encounter.clamp_indices();
+
+        assert_eq!(encounter.cursor_index, 0);
+        assert_eq!(encounter.initiative_index, 0);
+    }
+
+    #[test]
+    fn clamp_indices_on_empty_encounter_is_zero() {
+        let mut encounter = Encounter::default();
+        encounter.cursor_index = 3;
+        encounter.initiative_index = 3;
+
+        encounter.clamp_indices();
+
+        assert_eq!(encounter.cursor_index, 0);
+        assert_eq!(encounter.initiative_index, 0);
     }
 }

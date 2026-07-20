@@ -20,7 +20,6 @@ fn main() -> color_eyre::Result<()> {
 
     let mut term = ratatui::init();
     let mut app = storage::load_state()?.unwrap_or_default();
-    app.sync_table_state();
 
     let mut last_save = Instant::now();
 
