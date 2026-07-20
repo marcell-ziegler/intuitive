@@ -1,4 +1,3 @@
-use crossterm::event::Event;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{action::Action, editor::EditorState, model::Creature, storage::Encounter};
@@ -91,10 +90,6 @@ impl App {
         }
     }
 
-    fn delegate_editor_input_event(&mut self, e: &Event) {
-        self.editor_state.handle_input_event(e);
-    }
-
     pub fn update(&mut self, action: Action) -> Effect {
         match action {
             Action::SelectNextRow => {
@@ -152,7 +147,7 @@ impl App {
                 }
             }
             Action::EditorInput(e) => {
-                self.delegate_editor_input_event(&e);
+                self.editor_state.handle_input_event(&e);
                 Effect::None
             }
             Action::Quit => Effect::Quit,
