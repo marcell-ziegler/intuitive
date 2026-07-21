@@ -144,6 +144,10 @@ impl App {
                 self.editor_state.toggle_creature_type();
                 Effect::None
             }
+            Action::EditorToggleHpMode => {
+                self.editor_state.toggle_hp_mode();
+                Effect::None
+            }
             Action::SubmitEditor => {
                 if self.submit_editor() {
                     Effect::UpdateState
@@ -154,7 +158,8 @@ impl App {
                 }
             }
             Action::EditorInput(e) => {
-                self.editor_state.handle_input_event(&e);
+                self.editor_state
+                    .handle_input_event(&e, &self.current_encounter);
                 Effect::None
             }
             Action::DeleteCreatureAtIndex(index) => {
@@ -538,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    fn update_submit_editor_in_edit_mode_updates_in_place_and_preserves_hidden_state() {
+    fn update_submit_editor_in_edit_mode_updates_in_place_and_round_trips_untouched_fields() {
         let mut app = App::default();
         let mut goblin = Creature::new_monster("Goblin", 7, 15, Some(7), None, Some(0.25));
         goblin.add_status(crate::model::Status::Poisoned);
@@ -562,7 +567,8 @@ mod tests {
         assert_eq!(app.current_encounter.creatures.len(), 2);
         let edited = &app.current_encounter.creatures[0];
         assert_eq!(edited.name(), "Hobgoblin");
-        // The editor doesn't expose these, so they must survive the edit.
+        // Statuses/Initiative are editor-managed but weren't touched here —
+        // load_creature seeds them from the original, so they round-trip.
         assert!(
             edited
                 .get_statuses()

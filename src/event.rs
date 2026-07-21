@@ -41,9 +41,16 @@ fn handle_editor_keys(key_event: &KeyEvent, e: &Event) -> Option<Action> {
         KeyCode::Char('q') | KeyCode::Esc => Some(Action::CloseEditor),
         KeyCode::Tab | KeyCode::Down => Some(Action::EditorNextField),
         KeyCode::BackTab | KeyCode::Up => Some(Action::EditorPrevField),
-        KeyCode::Enter => Some(Action::SubmitEditor),
+        // Ctrl+Enter submits; plain Enter falls through to EditorInput, since
+        // the Statuses field gives it a field-specific meaning (add status).
+        KeyCode::Enter if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Action::SubmitEditor)
+        }
         KeyCode::Char('t') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(Action::EditorToggleCreatureType)
+        }
+        KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Action::EditorToggleHpMode)
         }
         _ => Some(Action::EditorInput(e.clone())),
     }
@@ -130,9 +137,19 @@ mod tests {
             Some(Action::EditorPrevField)
         );
         assert_eq!(
-            map_event(&app, &key(KeyCode::Enter)),
+            map_event(&app, &ctrl_key(KeyCode::Enter)),
             Some(Action::SubmitEditor)
         );
+    }
+
+    #[test]
+    fn editor_plain_enter_is_text_input_not_submit() {
+        // Only Ctrl+Enter submits — plain Enter is field-specific (e.g. the
+        // Statuses field uses it to add a status) and must never be eaten
+        // here, where there's no field context to decide that.
+        let app = editor_app();
+        let ev = key(KeyCode::Enter);
+        assert_eq!(map_event(&app, &ev), Some(Action::EditorInput(ev.clone())));
     }
 
     #[test]
@@ -157,6 +174,22 @@ mod tests {
         // only Ctrl+T toggles the creature type.
         let app = editor_app();
         let ev = key(KeyCode::Char('t'));
+        assert_eq!(map_event(&app, &ev), Some(Action::EditorInput(ev.clone())));
+    }
+
+    #[test]
+    fn editor_ctrl_r_toggles_hp_mode() {
+        let app = editor_app();
+        assert_eq!(
+            map_event(&app, &ctrl_key(KeyCode::Char('r'))),
+            Some(Action::EditorToggleHpMode)
+        );
+    }
+
+    #[test]
+    fn editor_plain_r_is_text_input_not_a_toggle() {
+        let app = editor_app();
+        let ev = key(KeyCode::Char('r'));
         assert_eq!(map_event(&app, &ev), Some(Action::EditorInput(ev.clone())));
     }
 

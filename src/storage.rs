@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::app::App;
 use crate::model::Encounter;
 
-const ENCOUNTER_RECORD_VERSION: u16 = 1;
+// v2: Creature gained `id`/`hit_die` fields (no serde default), so old files
+// must be rejected rather than fail deserialization with a confusing error.
+const ENCOUNTER_RECORD_VERSION: u16 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncounterRecord {
@@ -86,7 +88,8 @@ pub fn store_encounter(
     Ok(path)
 }
 
-const APP_STATE_RECORD_VERSION: u16 = 1;
+// See ENCOUNTER_RECORD_VERSION's note — same reason.
+const APP_STATE_RECORD_VERSION: u16 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppStateRecord {

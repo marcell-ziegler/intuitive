@@ -13,6 +13,7 @@ pub enum Action {
     EditorNextField,
     EditorPrevField,
     EditorToggleCreatureType,
+    EditorToggleHpMode,
     SubmitEditor,
     EditorInput(crossterm::event::Event), // raw event — see note
 

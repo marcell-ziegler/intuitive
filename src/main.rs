@@ -1,4 +1,9 @@
+use std::io::stdout;
 use std::time::{Duration, Instant};
+
+use crossterm::event::{
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 
 use crate::{app::Effect, event::map_event, ui::draw_ui};
 
@@ -20,6 +25,19 @@ fn main() -> color_eyre::Result<()> {
 
     let mut term = ratatui::init();
     let mut app = storage::load_state()?.unwrap_or_default();
+
+    // Best-effort: only some terminals report Ctrl+Enter as distinct from
+    // plain Enter, and only if this enhanced protocol is enabled — Ctrl+Enter
+    // (submit editor) may be indistinguishable from Enter without it. Silently
+    // skipped where unsupported; that's a terminal limitation, not an error.
+    let keyboard_enhancement =
+        crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
+    if keyboard_enhancement {
+        crossterm::execute!(
+            stdout(),
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        )?;
+    }
 
     let mut last_save = Instant::now();
 
@@ -51,6 +69,9 @@ fn main() -> color_eyre::Result<()> {
 
     // Always persist at the end
     storage::store_state(&app)?;
+    if keyboard_enhancement {
+        crossterm::execute!(stdout(), PopKeyboardEnhancementFlags)?;
+    }
     ratatui::restore();
     Ok(())
 }

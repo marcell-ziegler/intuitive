@@ -65,6 +65,26 @@ impl Creature {
         }
     }
 
+    /// Attach a hit-die dice expression (e.g. `"2d8+2"`), used to roll this
+    /// creature's HP. Builder-style so the many call sites that don't care
+    /// about hit dice (most of the test suite) don't need updating.
+    pub fn with_hit_die(mut self, hit_die: Option<String>) -> Self {
+        self.props_mut().hit_die = hit_die;
+        self
+    }
+
+    /// This creature's stable identity, used e.g. to resolve a
+    /// `Status::Grappled` target by name. Constant for the creature's
+    /// lifetime — `apply_edit` preserves it across edits.
+    pub fn id(&self) -> CreatureId {
+        self.props().id
+    }
+
+    /// The dice expression used to roll this creature's HP, if any.
+    pub fn hit_die(&self) -> Option<&str> {
+        self.props().hit_die.as_deref()
+    }
+
     pub fn props(&self) -> &CreatureProperties {
         match self {
             Creature::Player { props: p, level: _ } => p,
@@ -86,14 +106,18 @@ impl Creature {
     }
 
     /// Overwrite this creature with `edited` (typically fresh output from an
-    /// editor form), but keep `statuses`, `stats`, and `initiative` —
-    /// properties no editor form exposes. Without this, editing e.g. just a
-    /// creature's name would silently clear its active statuses or rolled
-    /// initiative, since `edited` was built from scratch and never had them.
+    /// editor form), but keep `id` and `stats` — the only properties left
+    /// that no editor form exposes. Without preserving `id`, editing e.g.
+    /// just a creature's name would silently mint a new random id, breaking
+    /// any `Status::Grappled` reference to it.
+    ///
+    /// `statuses` and `initiative` are *not* preserved here — the editor
+    /// manages both directly now, so `edited`'s own values (seeded from this
+    /// creature's by `EditorState::load_creature`, then possibly changed) are
+    /// authoritative.
     pub fn apply_edit(&mut self, mut edited: Creature) {
-        edited.props_mut().statuses = self.props().statuses.clone();
+        edited.props_mut().id = self.props().id;
         edited.props_mut().stats = self.props().stats;
-        edited.props_mut().initiative = self.props().initiative;
         *self = edited;
     }
 
@@ -254,14 +278,17 @@ impl Creature {
 
 /// Common properties of `Creature` variants
 ///
+/// * `id`: Stable identity, e.g. for `Status::Grappled` to reference by.
 /// * `name`: A player name, or statblock name, for the Creature
 /// * `hp`: Current health of the Creature
 /// * `max_hp`: Maximum health of the Creature
 /// * `ac`: Armor Class of creature
 /// * `is_dead`: wether the Creature is dead.
 /// * `statuses`: `Vec<Status>` of all statuses currently affecting the Creature.
+/// * `hit_die`: dice expression (e.g. `"2d8+2"`) used to roll HP, if any.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatureProperties {
+    pub id: CreatureId,
     pub name: String,
     pub hp: u32,
     pub max_hp: u32,
@@ -270,11 +297,13 @@ pub struct CreatureProperties {
     pub statuses: Vec<Status>,
     pub initiative: Option<u8>,
     pub stats: Stats,
+    pub hit_die: Option<String>,
 }
 
 impl CreatureProperties {
     pub fn new(name: String, cur_hp: u32, max_hp: u32, ac: u32, stats: Stats) -> Self {
         CreatureProperties {
+            id: Uuid::new_v4(),
             name,
             hp: cur_hp.min(max_hp),
             max_hp,
@@ -283,6 +312,7 @@ impl CreatureProperties {
             initiative: None,
             statuses: Vec::new(),
             stats,
+            hit_die: None,
         }
     }
 }
@@ -462,7 +492,7 @@ mod test {
     }
 
     #[test]
-    fn apply_edit_preserves_statuses_stats_and_initiative() {
+    fn apply_edit_preserves_id_and_stats_but_not_statuses_or_initiative() {
         let mut original = Creature::new_monster(
             "Goblin",
             7,
@@ -471,12 +501,16 @@ mod test {
             Some(Stats::new(8, 14, 10, 8, 8, 8)),
             Some(0.25),
         );
+        let original_id = original.id();
         original.add_status(Status::Poisoned);
         original.set_initiative(12);
 
         // A fresh Creature, as if it came straight out of the editor form —
-        // it has none of the above, and even changes the name.
-        let edited = Creature::new_monster("Goblin Renamed", 10, 16, Some(10), None, Some(0.5));
+        // the editor now manages statuses and initiative directly, so this
+        // one carries its own (different) values, and changes the name.
+        let mut edited = Creature::new_monster("Goblin Renamed", 10, 16, Some(10), None, Some(0.5));
+        edited.add_status(Status::Prone);
+        edited.set_initiative(20);
         original.apply_edit(edited);
 
         // Editable fields come from `edited`.
@@ -486,9 +520,13 @@ mod test {
         assert_eq!(original.ac(), 16);
         assert_eq!(original.get_level_or_cr(), 0.5);
 
+        // The editor now owns statuses and initiative: `edited`'s values win.
+        assert!(original.get_statuses().contains(&Status::Prone));
+        assert!(!original.get_statuses().contains(&Status::Poisoned));
+        assert_eq!(original.get_initiative(), Some(20));
+
         // Fields no editor form exposes survive the edit.
-        assert!(original.get_statuses().contains(&Status::Poisoned));
-        assert_eq!(original.get_initiative(), Some(12));
+        assert_eq!(original.id(), original_id);
         assert_eq!(original.stats(), Stats::new(8, 14, 10, 8, 8, 8));
     }
 
@@ -497,11 +535,29 @@ mod test {
         let mut original = Creature::new_monster("Goblin", 7, 15, Some(7), None, Some(0.25));
         original.set_initiative(9);
 
-        let edited = Creature::new_player("Goblin", 7, 15, Some(7), None, Some(3));
+        let mut edited = Creature::new_player("Goblin", 7, 15, Some(7), None, Some(3));
+        edited.set_initiative(14);
         original.apply_edit(edited);
 
         assert!(matches!(original, Creature::Player { .. }));
         assert_eq!(original.get_level_or_cr(), 3.0);
-        assert_eq!(original.get_initiative(), Some(9)); // preserved across the variant swap
+        assert_eq!(original.get_initiative(), Some(14)); // edited's own value wins
+    }
+
+    #[test]
+    fn each_new_creature_gets_a_unique_id() {
+        let a = Creature::new_player("Alice", 10, 10, None, None, None);
+        let b = Creature::new_player("Alice", 10, 10, None, None, None);
+        assert_ne!(a.id(), b.id());
+    }
+
+    #[test]
+    fn hit_die_round_trips_through_with_hit_die() {
+        let creature = Creature::new_monster("Goblin", 7, 15, None, None, None)
+            .with_hit_die(Some("2d8+2".into()));
+        assert_eq!(creature.hit_die(), Some("2d8+2"));
+
+        let creature = Creature::new_monster("Goblin", 7, 15, None, None, None);
+        assert_eq!(creature.hit_die(), None);
     }
 }
