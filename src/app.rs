@@ -67,16 +67,9 @@ impl App {
             let creature = self.editor_state.to_creature();
             self.add_creature(creature);
         } else {
-            let (name, max_hp, cur_hp, ac, cr) = self.editor_state.parsed();
+            let (name, _, _, _, _) = self.editor_state.parsed();
             for i in 1..=amount {
-                let creature = Creature::new_monster(
-                    &format!("{name} {i}"),
-                    max_hp,
-                    ac,
-                    Some(cur_hp),
-                    None,
-                    Some(cr),
-                );
+                let creature = self.editor_state.creature_with_name(&format!("{name} {i}"));
                 self.add_creature(creature);
             }
         }
@@ -139,6 +132,10 @@ impl App {
             }
             Action::EditorPrevField => {
                 self.editor_state.previous_field();
+                Effect::None
+            }
+            Action::EditorToggleCreatureType => {
+                self.editor_state.toggle_creature_type();
                 Effect::None
             }
             Action::SubmitEditor => {
@@ -309,6 +306,54 @@ mod tests {
     }
 
     #[test]
+    fn to_creature_builds_a_player_when_toggled() {
+        let mut e = valid_editor();
+        e.cr.input = e.cr.input.clone().with_value("5".into()); // reused as level
+        e.toggle_creature_type();
+
+        let creature = e.to_creature();
+        match creature {
+            Creature::Player { .. } => {}
+            _ => panic!("expected a Player"),
+        }
+        assert_eq!(creature.name(), "Goblin");
+        assert_eq!(creature.get_level_or_cr(), 5.0);
+    }
+
+    #[test]
+    fn toggle_creature_type_flips_back_and_forth() {
+        let mut e = EditorState::default();
+        assert_eq!(e.creature_type, crate::editor::CreatureType::Monster);
+        e.toggle_creature_type();
+        assert_eq!(e.creature_type, crate::editor::CreatureType::Player);
+        e.toggle_creature_type();
+        assert_eq!(e.creature_type, crate::editor::CreatureType::Monster);
+    }
+
+    #[test]
+    fn load_creature_sets_creature_type_from_the_loaded_creature() {
+        let mut e = EditorState::default();
+        e.toggle_creature_type(); // start on Player, to prove load_creature overwrites it
+        e.load_creature(&Creature::new_monster(
+            "Goblin",
+            7,
+            15,
+            Some(7),
+            None,
+            Some(0.25),
+        ));
+        assert_eq!(e.creature_type, crate::editor::CreatureType::Monster);
+    }
+
+    #[test]
+    fn clear_resets_creature_type_to_monster() {
+        let mut e = valid_editor();
+        e.toggle_creature_type();
+        e.clear();
+        assert_eq!(e.creature_type, crate::editor::CreatureType::Monster);
+    }
+
+    #[test]
     fn app_serde_round_trips_encounter_state() {
         let mut app = App::default();
         app.select_panel(Panel::Editor);
@@ -427,6 +472,21 @@ mod tests {
         assert_eq!(app.editor_state.active_input, EditorField::CurrentHP);
         assert_eq!(app.update(Action::EditorPrevField), Effect::None);
         assert_eq!(app.editor_state.active_input, EditorField::Name);
+    }
+
+    #[test]
+    fn update_editor_toggle_creature_type_flips_the_type() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor;
+        assert_eq!(
+            app.editor_state.creature_type,
+            crate::editor::CreatureType::Monster
+        );
+        assert_eq!(app.update(Action::EditorToggleCreatureType), Effect::None);
+        assert_eq!(
+            app.editor_state.creature_type,
+            crate::editor::CreatureType::Player
+        );
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub enum Action {
     CloseEditor,
     EditorNextField,
     EditorPrevField,
+    EditorToggleCreatureType,
     SubmitEditor,
     EditorInput(crossterm::event::Event), // raw event — see note
 

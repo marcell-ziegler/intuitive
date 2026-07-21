@@ -1,8 +1,9 @@
-use crate::editor::{EditorField, EditorInput, EditorState};
+use crate::editor::{CreatureType, EditorField, EditorInput, EditorState};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph, Widget},
 };
 
@@ -46,6 +47,7 @@ impl Widget for Editor<'_> {
             .border_type(BorderType::Rounded)
             .border_style(Color::LightBlue)
             .title("Edit Creature")
+            .title_bottom(keybind_hint())
             .render(editor_area, buf);
 
         let s = self.state;
@@ -88,11 +90,19 @@ impl Widget for Editor<'_> {
             input_chunks[3],
             buf,
         );
+        let creature_type_cr_chunks =
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).split(input_chunks[4]);
         render_input(
             &s.cr,
             "Lvl / CR",
             s.active_input == EditorField::CR,
-            input_chunks[4],
+            creature_type_cr_chunks[0],
+            buf,
+        );
+        render_toggle_box(
+            s.creature_type,
+            "Creature type",
+            creature_type_cr_chunks[1],
             buf,
         );
         render_input(
@@ -103,6 +113,19 @@ impl Widget for Editor<'_> {
             buf,
         );
     }
+}
+
+/// The keybind hint rendered along the bottom border of the table.
+fn keybind_hint() -> Line<'static> {
+    Span::from("─")
+        + Span::from("ctrl + t").bold().white()
+        + Span::from(" ")
+        + Span::from("Toggle Type").white()
+        + Span::from("──")
+        + Span::from("Enter").bold().white()
+        + Span::from(" ")
+        + Span::from("Submit").white()
+        + Span::from("──")
 }
 
 /// Render a single bordered text field, scrolled to keep the tail visible.
@@ -129,6 +152,20 @@ fn render_input(field: &EditorInput, name: &str, active: bool, area: Rect, buf: 
         .render(area, buf);
 }
 
+fn render_toggle_box(creature_type: CreatureType, name: &str, area: Rect, buf: &mut Buffer) {
+    let text_style: Style = match creature_type {
+        CreatureType::Monster => Color::LightGreen.into(),
+        CreatureType::Player => Color::LightBlue.into(),
+    };
+    Paragraph::new(match creature_type {
+        CreatureType::Monster => "Monster",
+        CreatureType::Player => "Player",
+    })
+    .style(text_style)
+    .block(Block::bordered().title(name).border_style(text_style))
+    .render(area, buf);
+}
+
 /// Return a centered `Rect` area with width as a percentage and height in lines.
 fn centered_rect_fixed_height(percent_x: u16, height: u16, area: Rect) -> Rect {
     let popup_layout = Layout::vertical([
@@ -148,7 +185,7 @@ fn centered_rect_fixed_height(percent_x: u16, height: u16, area: Rect) -> Rect {
 
 /// Return a centered `Rect` area, sized as a percentage of `area` in both axes.
 ///
-/// Unused scaffolding for future modals (kept intentionally; see CLAUDE.md).
+/// Unused scaffolding for future modals
 #[allow(dead_code)]
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let popup_layout = Layout::vertical([

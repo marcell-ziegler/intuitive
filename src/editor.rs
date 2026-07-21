@@ -54,6 +54,22 @@ impl EditorInput {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CreatureType {
+    Player,
+    #[default]
+    Monster,
+}
+
+impl CreatureType {
+    pub fn toggle(&mut self) {
+        *self = match self {
+            CreatureType::Player => CreatureType::Monster,
+            CreatureType::Monster => CreatureType::Player,
+        };
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct EditorState {
     pub name: EditorInput,
@@ -62,6 +78,7 @@ pub struct EditorState {
     pub ac: EditorInput,
     pub cr: EditorInput,
     pub amount: EditorInput,
+    pub creature_type: CreatureType,
     pub active_input: EditorField,
 }
 
@@ -88,6 +105,7 @@ impl Default for EditorState {
                 valid: true,
             },
             active_input: EditorField::default(),
+            creature_type: CreatureType::Monster,
         }
     }
 }
@@ -103,6 +121,11 @@ impl EditorState {
             EditorField::Amount | EditorField::Unfocused => EditorField::Name,
         };
     }
+
+    pub fn toggle_creature_type(&mut self) {
+        self.creature_type.toggle();
+    }
+
     pub fn previous_field(&mut self) {
         self.active_input = match self.active_input {
             EditorField::Name => EditorField::Amount,
@@ -158,7 +181,8 @@ impl EditorState {
             input: self.amount.input.clone().with_value("1".into()),
             kind: self.amount.kind,
             valid: self.amount.valid,
-        }
+        };
+        self.creature_type = CreatureType::default();
     }
 
     pub fn load_creature(&mut self, creature: &Creature) {
@@ -184,6 +208,10 @@ impl EditorState {
             .clone()
             .with_value(creature.get_level_or_cr().to_string());
         self.amount.input = self.amount.input.clone().with_value("1".into());
+        self.creature_type = match creature {
+            Creature::Player { .. } => CreatureType::Player,
+            Creature::Monster { .. } => CreatureType::Monster,
+        };
         for field in self.fields_mut() {
             field.valid = true;
         }
@@ -240,13 +268,28 @@ impl EditorState {
             .max(1)
     }
 
-    /// Build a single [`Creature`] from the current field values.
-    ///
-    /// The editor has no Player/Monster toggle yet, so this always produces a
-    /// [`Creature::Monster`].
+    /// Build a single [`Creature`] from the current field values, using `name`
+    /// in place of the Name field's own value (so numbered copies like
+    /// "Goblin 1" can share one code path with a single submit). Honors
+    /// `creature_type`: the `cr` field doubles as level (parsed as `u8`) for a
+    /// [`Creature::Player`], or challenge rating (`f64`) for a `Monster`.
+    pub fn creature_with_name(&self, name: &str) -> Creature {
+        let (_, max_hp, cur_hp, ac, cr) = self.parsed();
+        match self.creature_type {
+            CreatureType::Player => {
+                Creature::new_player(name, max_hp, ac, Some(cur_hp), None, Some(cr as u8))
+            }
+            CreatureType::Monster => {
+                Creature::new_monster(name, max_hp, ac, Some(cur_hp), None, Some(cr))
+            }
+        }
+    }
+
+    /// Build a single [`Creature`] from the current field values, including
+    /// the Name field.
     pub fn to_creature(&self) -> Creature {
-        let (name, max_hp, cur_hp, ac, cr) = self.parsed();
-        Creature::new_monster(&name, max_hp, ac, Some(cur_hp), None, Some(cr))
+        let name = self.name.input.value().trim().to_string();
+        self.creature_with_name(&name)
     }
 }
 

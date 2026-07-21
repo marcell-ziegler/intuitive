@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, BorderType, Padding, Row, StatefulWidget, Table, TableState},
 };
 
-use crate::model::Encounter;
+use crate::model::{Creature, Encounter};
 
 /// The initiative-order table.
 ///
@@ -38,9 +38,27 @@ impl StatefulWidget for InitiativeTable<'_> {
             let is_initiative = self.encounter.initiative_index == i;
 
             let (icon, row_style) = match (is_selected, is_initiative) {
-                (true, true) => ("󰞇", Style::new().on_yellow().dark_gray()),
+                (true, true) => (
+                    "󰞇",
+                    if let Creature::Player { .. } =
+                        self.encounter.creatures[self.encounter.initiative_index]
+                    {
+                        Style::new().on_light_blue().gray()
+                    } else {
+                        Style::new().on_yellow().dark_gray()
+                    },
+                ),
                 (true, false) => (" ", Style::new().on_dark_gray()),
-                (false, true) => ("󰞇 ", Style::new().on_yellow().dark_gray()),
+                (false, true) => (
+                    "󰞇 ",
+                    if let Creature::Player { .. } =
+                        self.encounter.creatures[self.encounter.initiative_index]
+                    {
+                        Style::new().on_light_blue().gray()
+                    } else {
+                        Style::new().on_yellow().dark_gray()
+                    },
+                ),
                 (false, false) => ("  ", Style::default()),
             };
 
@@ -106,15 +124,15 @@ fn format_level_or_cr(value: f64) -> String {
 fn keybind_hint() -> Line<'static> {
     Span::from("─")
         + Span::from("k/j").bold().white()
-        + Span::from("─")
+        + Span::from(" ")
         + Span::from("Up/Down").white()
         + Span::from("──")
         + Span::from("Tab").bold().white()
-        + Span::from("─")
+        + Span::from(" ")
         + Span::from("Swap Panel").white()
         + Span::from("──")
         + Span::from("n").bold().white()
-        + Span::from("─")
+        + Span::from(" ")
         + Span::from("Add Creature").white()
         + Span::from("──")
 }

@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 use crate::{
     action::Action,
@@ -31,22 +31,12 @@ fn handle_main_view_keys(key_event: &KeyEvent, _: &Event) -> Option<Action> {
 
 fn handle_editor_keys(key_event: &KeyEvent, e: &Event) -> Option<Action> {
     match key_event.code {
-        KeyCode::Char('q') | KeyCode::Esc => {
-            // app.current_panel = Panel::InitiativeTable;
-            // TODO: Clear input states
-            Some(Action::CloseEditor)
-        }
-        KeyCode::Tab | KeyCode::Down => {
-            // app.editor_state.next_field();
-            Some(Action::EditorNextField)
-        }
-        KeyCode::BackTab | KeyCode::Up => {
-            // app.editor_state.previous_field();
-            Some(Action::EditorPrevField)
-        }
-        KeyCode::Enter => {
-            // app.submit_editor();
-            Some(Action::SubmitEditor)
+        KeyCode::Char('q') | KeyCode::Esc => Some(Action::CloseEditor),
+        KeyCode::Tab | KeyCode::Down => Some(Action::EditorNextField),
+        KeyCode::BackTab | KeyCode::Up => Some(Action::EditorPrevField),
+        KeyCode::Enter => Some(Action::SubmitEditor),
+        KeyCode::Char('t') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Action::EditorToggleCreatureType)
         }
         _ => Some(Action::EditorInput(e.clone())),
     }
@@ -55,10 +45,13 @@ fn handle_editor_keys(key_event: &KeyEvent, e: &Event) -> Option<Action> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::KeyModifiers;
 
     fn key(code: KeyCode) -> Event {
         Event::Key(KeyEvent::new(code, KeyModifiers::empty()))
+    }
+
+    fn ctrl_key(code: KeyCode) -> Event {
+        Event::Key(KeyEvent::new(code, KeyModifiers::CONTROL))
     }
 
     fn editor_app() -> App {
@@ -139,6 +132,24 @@ mod tests {
     fn editor_falls_through_to_text_input() {
         let app = editor_app();
         let ev = key(KeyCode::Char('x'));
+        assert_eq!(map_event(&app, &ev), Some(Action::EditorInput(ev.clone())));
+    }
+
+    #[test]
+    fn editor_ctrl_t_toggles_creature_type() {
+        let app = editor_app();
+        assert_eq!(
+            map_event(&app, &ctrl_key(KeyCode::Char('t'))),
+            Some(Action::EditorToggleCreatureType)
+        );
+    }
+
+    #[test]
+    fn editor_plain_t_is_text_input_not_a_toggle() {
+        // Bare `t` must stay ordinary text so names like "Troll" can be typed;
+        // only Ctrl+T toggles the creature type.
+        let app = editor_app();
+        let ev = key(KeyCode::Char('t'));
         assert_eq!(map_event(&app, &ev), Some(Action::EditorInput(ev.clone())));
     }
 
