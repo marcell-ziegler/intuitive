@@ -135,4 +135,12 @@ fn keybind_hint() -> Line<'static> {
         + Span::from(" ")
         + Span::from("Add Creature").white()
         + Span::from("──")
+        + Span::from("e").bold().white()
+        + Span::from(" ")
+        + Span::from("Edit").white()
+        + Span::from("──")
+        + Span::from("del").bold().white()
+        + Span::from(" ")
+        + Span::from("Delete").white()
+        + Span::from("──")
 }

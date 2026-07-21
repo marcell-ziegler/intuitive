@@ -3,13 +3,16 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use crate::{
     action::Action,
     app::{App, Panel},
+    model::Encounter,
 };
 
 pub fn map_event(app: &App, e: &Event) -> Option<Action> {
     if let Some(key_event) = e.as_key_event() {
         match app.current_panel {
             Panel::Editor => handle_editor_keys(&key_event, e),
-            Panel::InitiativeTable | Panel::Sidebar => handle_main_view_keys(&key_event, e),
+            Panel::InitiativeTable | Panel::Sidebar => {
+                handle_main_view_keys(&app.current_encounter, &key_event, e)
+            }
         }
     } else {
         None
@@ -17,7 +20,7 @@ pub fn map_event(app: &App, e: &Event) -> Option<Action> {
 }
 
 /// Returns Some(true) if the loop is to be broken
-fn handle_main_view_keys(key_event: &KeyEvent, _: &Event) -> Option<Action> {
+fn handle_main_view_keys(encounter: &Encounter, key_event: &KeyEvent, _: &Event) -> Option<Action> {
     match key_event.code {
         KeyCode::Char('q') => Some(Action::Quit),
         KeyCode::Char('j') | KeyCode::Down => Some(Action::SelectNextRow),
@@ -25,6 +28,10 @@ fn handle_main_view_keys(key_event: &KeyEvent, _: &Event) -> Option<Action> {
         KeyCode::Char(' ') => Some(Action::AdvanceTurn),
         KeyCode::Tab => Some(Action::SwitchPanel),
         KeyCode::Char('n') => Some(Action::OpenEditorWithNewCreature),
+        KeyCode::Delete | KeyCode::Backspace => {
+            Some(Action::DeleteCreatureAtIndex(encounter.cursor_index))
+        }
+        KeyCode::Char('e') => Some(Action::OpenEditorAtIndex(encounter.cursor_index)),
         _ => None,
     }
 }

@@ -85,6 +85,18 @@ impl Creature {
         }
     }
 
+    /// Overwrite this creature with `edited` (typically fresh output from an
+    /// editor form), but keep `statuses`, `stats`, and `initiative` —
+    /// properties no editor form exposes. Without this, editing e.g. just a
+    /// creature's name would silently clear its active statuses or rolled
+    /// initiative, since `edited` was built from scratch and never had them.
+    pub fn apply_edit(&mut self, mut edited: Creature) {
+        edited.props_mut().statuses = self.props().statuses.clone();
+        edited.props_mut().stats = self.props().stats;
+        edited.props_mut().initiative = self.props().initiative;
+        *self = edited;
+    }
+
     /// Return the current health of the Creature
     pub fn hp(&self) -> u32 {
         self.props().hp
@@ -447,5 +459,49 @@ mod test {
         monster.clear_initiative();
         let new_roll = monster.roll_initiative();
         assert!((1..=20).contains(&new_roll));
+    }
+
+    #[test]
+    fn apply_edit_preserves_statuses_stats_and_initiative() {
+        let mut original = Creature::new_monster(
+            "Goblin",
+            7,
+            15,
+            Some(7),
+            Some(Stats::new(8, 14, 10, 8, 8, 8)),
+            Some(0.25),
+        );
+        original.add_status(Status::Poisoned);
+        original.set_initiative(12);
+
+        // A fresh Creature, as if it came straight out of the editor form —
+        // it has none of the above, and even changes the name.
+        let edited = Creature::new_monster("Goblin Renamed", 10, 16, Some(10), None, Some(0.5));
+        original.apply_edit(edited);
+
+        // Editable fields come from `edited`.
+        assert_eq!(original.name(), "Goblin Renamed");
+        assert_eq!(original.max_hp(), 10);
+        assert_eq!(original.hp(), 10);
+        assert_eq!(original.ac(), 16);
+        assert_eq!(original.get_level_or_cr(), 0.5);
+
+        // Fields no editor form exposes survive the edit.
+        assert!(original.get_statuses().contains(&Status::Poisoned));
+        assert_eq!(original.get_initiative(), Some(12));
+        assert_eq!(original.stats(), Stats::new(8, 14, 10, 8, 8, 8));
+    }
+
+    #[test]
+    fn apply_edit_can_change_creature_variant() {
+        let mut original = Creature::new_monster("Goblin", 7, 15, Some(7), None, Some(0.25));
+        original.set_initiative(9);
+
+        let edited = Creature::new_player("Goblin", 7, 15, Some(7), None, Some(3));
+        original.apply_edit(edited);
+
+        assert!(matches!(original, Creature::Player { .. }));
+        assert_eq!(original.get_level_or_cr(), 3.0);
+        assert_eq!(original.get_initiative(), Some(9)); // preserved across the variant swap
     }
 }

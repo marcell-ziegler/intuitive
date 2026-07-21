@@ -7,7 +7,7 @@ pub enum Action {
     SwitchPanel,
 
     // Editor lifecycle
-    OpenEditorAtIndex(u16), // Index to edit at
+    OpenEditorAtIndex(usize),
     OpenEditorWithNewCreature,
     CloseEditor,
     EditorNextField,
@@ -15,6 +15,10 @@ pub enum Action {
     EditorToggleCreatureType,
     SubmitEditor,
     EditorInput(crossterm::event::Event), // raw event — see note
+
+    // Creature  handling
+    DeleteCreatureAtIndex(usize),
+    DamageCreatureAtIndex(usize),
 
     Quit,
 }

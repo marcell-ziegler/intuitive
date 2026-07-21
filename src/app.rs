@@ -62,15 +62,21 @@ impl App {
             return false;
         }
 
-        let amount = self.editor_state.amount();
-        if amount == 1 {
-            let creature = self.editor_state.to_creature();
-            self.add_creature(creature);
+        if let Some(idx) = self.editor_state.editing_index {
+            if let Some(existing) = self.current_encounter.creatures.get_mut(idx) {
+                existing.apply_edit(self.editor_state.to_creature());
+            }
         } else {
-            let (name, _, _, _, _) = self.editor_state.parsed();
-            for i in 1..=amount {
-                let creature = self.editor_state.creature_with_name(&format!("{name} {i}"));
+            let amount = self.editor_state.amount();
+            if amount == 1 {
+                let creature = self.editor_state.to_creature();
                 self.add_creature(creature);
+            } else {
+                let (name, _, _, _, _) = self.editor_state.parsed();
+                for i in 1..=amount {
+                    let creature = self.editor_state.creature_with_name(&format!("{name} {i}"));
+                    self.add_creature(creature);
+                }
             }
         }
 
@@ -114,9 +120,9 @@ impl App {
                 Effect::None
             }
             Action::OpenEditorAtIndex(index) => {
-                if let Some(creature) = self.current_encounter.creatures.get(index as usize) {
+                if let Some(creature) = self.current_encounter.creatures.get(index) {
                     let creature = creature.clone();
-                    self.editor_state.load_creature(&creature);
+                    self.editor_state.load_creature(&creature, Some(index));
                 }
                 self.current_panel = Panel::Editor;
                 Effect::None
@@ -149,6 +155,17 @@ impl App {
             }
             Action::EditorInput(e) => {
                 self.editor_state.handle_input_event(&e);
+                Effect::None
+            }
+            Action::DeleteCreatureAtIndex(index) => {
+                if self.current_encounter.remove_creature(index).is_some() {
+                    Effect::UpdateState
+                } else {
+                    Effect::None
+                }
+            }
+            Action::DamageCreatureAtIndex(index) => {
+                todo!();
                 Effect::None
             }
             Action::Quit => Effect::Quit,
@@ -334,14 +351,10 @@ mod tests {
     fn load_creature_sets_creature_type_from_the_loaded_creature() {
         let mut e = EditorState::default();
         e.toggle_creature_type(); // start on Player, to prove load_creature overwrites it
-        e.load_creature(&Creature::new_monster(
-            "Goblin",
-            7,
-            15,
-            Some(7),
+        e.load_creature(
+            &Creature::new_monster("Goblin", 7, 15, Some(7), None, Some(0.25)),
             None,
-            Some(0.25),
-        ));
+        );
         assert_eq!(e.creature_type, crate::editor::CreatureType::Monster);
     }
 
@@ -522,6 +535,73 @@ mod tests {
         assert_eq!(app.current_encounter.creatures.len(), 3);
         assert_eq!(app.current_encounter.creatures[0].name(), "Goblin 1");
         assert_eq!(app.current_encounter.creatures[2].name(), "Goblin 3");
+    }
+
+    #[test]
+    fn update_submit_editor_in_edit_mode_updates_in_place_and_preserves_hidden_state() {
+        let mut app = App::default();
+        let mut goblin = Creature::new_monster("Goblin", 7, 15, Some(7), None, Some(0.25));
+        goblin.add_status(crate::model::Status::Poisoned);
+        goblin.set_initiative(11);
+        app.current_encounter.add_creature(goblin);
+        app.current_encounter
+            .add_creature(Creature::new_player("Alice", 10, 10, None, None, None));
+
+        // Open the editor on the goblin (index 0) and rename it.
+        app.update(Action::OpenEditorAtIndex(0));
+        app.editor_state.name.input = app
+            .editor_state
+            .name
+            .input
+            .clone()
+            .with_value("Hobgoblin".into());
+
+        assert_eq!(app.update(Action::SubmitEditor), Effect::UpdateState);
+
+        // Still 2 creatures — edited in place, not appended.
+        assert_eq!(app.current_encounter.creatures.len(), 2);
+        let edited = &app.current_encounter.creatures[0];
+        assert_eq!(edited.name(), "Hobgoblin");
+        // The editor doesn't expose these, so they must survive the edit.
+        assert!(
+            edited
+                .get_statuses()
+                .contains(&crate::model::Status::Poisoned)
+        );
+        assert_eq!(edited.get_initiative(), Some(11));
+        // The other creature is untouched.
+        assert_eq!(app.current_encounter.creatures[1].name(), "Alice");
+    }
+
+    #[test]
+    fn update_submit_editor_with_stale_editing_index_does_not_panic() {
+        let mut app = App::default();
+        app.current_panel = Panel::Editor;
+        app.editor_state = valid_editor();
+        // Simulate the creature at this index having disappeared since the
+        // editor was opened (e.g. deleted from another session/flow).
+        app.editor_state.editing_index = Some(3);
+
+        assert_eq!(app.update(Action::SubmitEditor), Effect::UpdateState);
+        assert_eq!(app.current_encounter.creatures.len(), 0); // no-op, not appended either
+    }
+
+    #[test]
+    fn update_delete_creature_at_index_removes_it_and_requests_save() {
+        let mut app = app_with_creatures(2);
+        assert_eq!(
+            app.update(Action::DeleteCreatureAtIndex(0)),
+            Effect::UpdateState
+        );
+        assert_eq!(app.current_encounter.creatures.len(), 1);
+        assert_eq!(app.current_encounter.creatures[0].name(), "C1");
+    }
+
+    #[test]
+    fn update_delete_creature_out_of_range_does_not_panic() {
+        let mut app = App::default(); // empty encounter; cursor_index is 0
+        assert_eq!(app.update(Action::DeleteCreatureAtIndex(0)), Effect::None);
+        assert_eq!(app.current_encounter.creatures.len(), 0);
     }
 
     #[test]

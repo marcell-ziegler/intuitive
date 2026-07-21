@@ -80,6 +80,7 @@ pub struct EditorState {
     pub amount: EditorInput,
     pub creature_type: CreatureType,
     pub active_input: EditorField,
+    pub editing_index: Option<usize>,
 }
 
 impl Default for EditorState {
@@ -106,6 +107,7 @@ impl Default for EditorState {
             },
             active_input: EditorField::default(),
             creature_type: CreatureType::Monster,
+            editing_index: None,
         }
     }
 }
@@ -183,9 +185,10 @@ impl EditorState {
             valid: self.amount.valid,
         };
         self.creature_type = CreatureType::default();
+        self.editing_index = None;
     }
 
-    pub fn load_creature(&mut self, creature: &Creature) {
+    pub fn load_creature(&mut self, creature: &Creature, creature_index: Option<usize>) {
         self.name.input = self
             .name
             .input
@@ -215,6 +218,7 @@ impl EditorState {
         for field in self.fields_mut() {
             field.valid = true;
         }
+        self.editing_index = creature_index;
     }
 
     /// Validate every field against its [`FieldKind`], plus the cross-field rule
